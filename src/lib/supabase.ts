@@ -5,6 +5,15 @@ const SUPABASE_ANON_KEY = 'sb_publishable_DUPpA49gmzLkJzv4bGNv6A_adAwJXFl'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+// Development mode: use email/password until email service is configured
+export async function signInWithPassword(email: string, password: string) {
+  const { error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  })
+  return { error }
+}
+
 export async function signInWithMagicLink(email: string) {
   const { error } = await supabase.auth.signInWithOtp({
     email,

@@ -1,12 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { signInWithMagicLink } from '@/lib/supabase'
+import { signInWithPassword } from '@/lib/supabase'
 
 export default function LoginPage() {
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -14,13 +14,13 @@ export default function LoginPage() {
     setError('')
     setLoading(true)
 
-    const { error } = await signInWithMagicLink(email)
+    const { error } = await signInWithPassword(email, password)
     
     if (error) {
       setError(error.message)
       setLoading(false)
     } else {
-      setSent(true)
+      window.location.href = '/dashboard'
     }
   }
 
@@ -30,53 +30,55 @@ export default function LoginPage() {
         <h1 style={styles.title}>Footcandle Film Society</h1>
         <p style={styles.subtitle}>Members Portal</p>
 
-        {sent ? (
-          <div style={styles.success}>
-            <p style={styles.checkmark}>✓</p>
-            <h2>Check your email!</h2>
-            <p>We've sent a magic link to <strong>{email}</strong></p>
-            <p style={styles.small}>Click the link to log in to your membership account.</p>
+        <p style={styles.description}>
+          Sign in with your email and password to view your membership status, attendance history, and upcoming screenings.
+        </p>
+
+        <form onSubmit={handleSubmit}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Email Address</label>
+            <input
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="alan@footcandle.org"
+              required
+              style={styles.input}
+              disabled={loading}
+            />
           </div>
-        ) : (
-          <>
-            <p style={styles.description}>
-              Sign in with your email to view your membership status, attendance history, and upcoming screenings.
-            </p>
 
-            <form onSubmit={handleSubmit}>
-              <div style={styles.formGroup}>
-                <label style={styles.label}>Email Address</label>
-                <input
-                  type="email"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  placeholder="you@example.com"
-                  required
-                  style={styles.input}
-                  disabled={loading}
-                />
-              </div>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              required
+              style={styles.input}
+              disabled={loading}
+            />
+          </div>
 
-              {error && <p style={styles.error}>{error}</p>}
+          {error && <p style={styles.error}>{error}</p>}
 
-              <button
-                type="submit"
-                disabled={loading}
-                style={{
-                  ...styles.button,
-                  opacity: loading ? 0.6 : 1,
-                  cursor: loading ? 'not-allowed' : 'pointer'
-                }}
-              >
-                {loading ? 'Sending...' : 'Send Magic Link'}
-              </button>
-            </form>
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              ...styles.button,
+              opacity: loading ? 0.6 : 1,
+              cursor: loading ? 'not-allowed' : 'pointer'
+            }}
+          >
+            {loading ? 'Signing in...' : 'Sign In'}
+          </button>
+        </form>
 
-            <p style={styles.help}>
-              We'll send you a secure link to log in. No password needed!
-            </p>
-          </>
-        )}
+        <p style={styles.help}>
+          Development mode: Using email + password for testing
+        </p>
       </div>
     </div>
   )
@@ -155,22 +157,11 @@ const styles = {
     background: '#fee2e2',
     borderRadius: '4px'
   },
-  success: {
-    textAlign: 'center' as const
-  },
-  checkmark: {
-    fontSize: '48px',
-    marginBottom: '16px'
-  },
-  small: {
-    fontSize: '13px',
-    color: '#6b7280',
-    marginTop: '12px'
-  },
   help: {
     fontSize: '12px',
     color: '#9ca3af',
     textAlign: 'center' as const,
-    marginTop: '16px'
+    marginTop: '16px',
+    fontStyle: 'italic' as const
   }
 }
