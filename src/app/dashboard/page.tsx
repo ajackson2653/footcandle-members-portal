@@ -1,7 +1,11 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+<<<<<<< HEAD
 import { createClient } from '@/lib/supabase'
+=======
+import { supabase } from '@/lib/supabase'
+>>>>>>> 8976071 (Fix: Import supabase client correctly in dashboard)
 import { useRouter } from 'next/navigation'
 import { Heart, LogOut, Bell, Clock, Film } from 'lucide-react'
 
@@ -68,7 +72,10 @@ export default function Dashboard() {
 
   async function loadDashboard() {
     try {
+<<<<<<< HEAD
       const supabase = createClient()
+=======
+>>>>>>> 8976071 (Fix: Import supabase client correctly in dashboard)
 
       // Get current user
       const {
@@ -156,7 +163,10 @@ export default function Dashboard() {
   }
 
   async function handleLogout() {
+<<<<<<< HEAD
     const supabase = createClient()
+=======
+>>>>>>> 8976071 (Fix: Import supabase client correctly in dashboard)
     await supabase.auth.signOut()
     router.push('/')
   }

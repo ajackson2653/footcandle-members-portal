@@ -5,6 +5,11 @@ const SUPABASE_ANON_KEY = 'sb_publishable_DUPpA49gmzLkJzv4bGNv6A_adAwJXFl'
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY)
 
+// Export createClient function for use in components
+export function getSupabaseClient() {
+  return supabase
+}
+
 // Development mode: use email/password until email service is configured
 export async function signInWithPassword(email: string, password: string) {
   const { error } = await supabase.auth.signInWithPassword({

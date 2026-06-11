@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { ArrowLeft, Upload, Plus, Trash2 } from 'lucide-react'
@@ -30,6 +30,7 @@ export default function FilmScreeningsAdmin() {
   ])
   const [loading, setLoading] = useState(false)
   const [message, setMessage] = useState('')
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setFormData({
@@ -44,6 +45,27 @@ export default function FilmScreeningsAdmin() {
       setPosterFile(file)
       const reader = new FileReader()
       reader.onload = (e) => setPosterPreview(e.target?.result as string)
+      reader.readAsDataURL(file)
+    }
+  }
+
+  const handleUploadAreaClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+  }
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const file = e.dataTransfer.files?.[0]
+    if (file && file.type.startsWith('image/')) {
+      setPosterFile(file)
+      const reader = new FileReader()
+      reader.onload = (event) => setPosterPreview(event.target?.result as string)
       reader.readAsDataURL(file)
     }
   }
@@ -71,6 +93,12 @@ export default function FilmScreeningsAdmin() {
     setMessage('')
 
     try {
+      // Validate at least one screening date is filled
+      const validDates = screeningDates.filter(d => d.screening_date && d.screening_time && d.venue && d.location_city)
+      if (validDates.length === 0) {
+        throw new Error('Please add at least one complete screening date with date, time, venue, and city')
+      }
+
       let posterUrl = ''
 
       // Upload poster if provided
@@ -80,12 +108,12 @@ export default function FilmScreeningsAdmin() {
           .from('film-posters')
           .upload(fileName, posterFile)
 
-        if (uploadError) throw uploadError
-        
+        if (uploadError) throw new Error(`Poster upload failed: ${uploadError.message}`)
+
         const { data: { publicUrl } } = supabase.storage
           .from('film-posters')
           .getPublicUrl(fileName)
-        
+
         posterUrl = publicUrl
       }
 
@@ -105,24 +133,25 @@ export default function FilmScreeningsAdmin() {
         })
         .select()
 
-      if (filmError) throw filmError
+      if (filmError) throw new Error(`Failed to create film screening: ${filmError.message}`)
+      if (!filmData || filmData.length === 0) throw new Error('No film data returned from database')
 
-      // Add screening dates
+      // Add screening dates (only valid ones)
       const filmId = filmData[0].id
-      const dateRecords = screeningDates.map(d => ({
+      const dateRecords = validDates.map(d => ({
         film_screening_id: filmId,
         screening_date: d.screening_date,
         screening_time: d.screening_time,
         venue: d.venue,
         location_city: d.location_city,
-        address: d.address
+        address: d.address || null
       }))
 
       const { error: datesError } = await supabase
         .from('screening_dates')
         .insert(dateRecords)
 
-      if (datesError) throw datesError
+      if (datesError) throw new Error(`Failed to add screening dates: ${datesError.message}`)
 
       setMessage('✓ Film screening created successfully!')
       setFormData({
@@ -137,7 +166,9 @@ export default function FilmScreeningsAdmin() {
       setPosterPreview('')
       setScreeningDates([{ screening_date: '', screening_time: '', venue: '', location_city: '', address: '' }])
     } catch (err) {
-      setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error'
+      setMessage(`❌ Error: ${errorMsg}`)
+      console.error('Film screening error:', err)
     } finally {
       setLoading(false)
     }
@@ -188,8 +219,14 @@ export default function FilmScreeningsAdmin() {
             {/* Poster Upload */}
             <div style={styles.formGroup}>
               <label style={styles.label}>Movie Poster</label>
-              <div style={styles.uploadArea}>
+              <div
+                style={styles.uploadArea}
+                onClick={handleUploadAreaClick}
+                onDragOver={handleDragOver}
+                onDrop={handleDrop}
+              >
                 <input
+                  ref={fileInputRef}
                   type="file"
                   accept="image/*"
                   onChange={handlePosterChange}
@@ -197,6 +234,7 @@ export default function FilmScreeningsAdmin() {
                 />
                 <Upload size={24} />
                 <p>Click to upload or drag and drop</p>
+                {posterFile && <p style={{ fontSize: '12px', color: '#666' }}>✓ {posterFile.name}</p>}
               </div>
               {posterPreview && (
                 <img
