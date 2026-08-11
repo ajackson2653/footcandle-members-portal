@@ -1,12 +1,15 @@
 export interface Member {
   id: string
-  eventive_id: string
+  eventive_id: string | null
   full_name: string
-  email: string
-  status: 'active' | 'expired' | 'canceled'
+  first_name: string | null
+  last_name: string | null
+  email: string | null
+  status: 'active' | 'expired' | 'canceled' | null
   renewal_date: string | null
+  expired_date: string | null
   autorenew: boolean
-  membership_type: string
+  membership_type: string | null
   updated_at: string
 }
 

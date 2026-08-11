@@ -1,0 +1,84 @@
+// ════════════════════════════════════════════════════════════════════
+// Admin member writes — server-side, service-role. Member records are PII
+// and this table is our source of truth, so writes never happen with the
+// public anon key in the browser. Reads still use the anon read policy
+// client-side; only create/update/delete route through here.
+//
+// Requires env var SUPABASE_SERVICE_ROLE_KEY (set in Vercel + .env.local).
+// Every write requires a valid logged-in Supabase session (bearer token).
+// TODO: once real admin roles exist, check role here, not just "logged in".
+// ════════════════════════════════════════════════════════════════════
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY
+
+// Fields an admin may set. Anything else in the payload is ignored.
+const EDITABLE = [
+  'full_name', 'first_name', 'last_name', 'email',
+  'status', 'renewal_date', 'expired_date', 'autorenew', 'membership_type',
+] as const
+
+function admin() {
+  return createClient(SUPABASE_URL, SERVICE!, { auth: { persistSession: false } })
+}
+
+async function requireUser(req: NextRequest) {
+  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
+  if (!token) return null
+  const { data } = await createClient(SUPABASE_URL, ANON).auth.getUser(token)
+  return data.user
+}
+
+function clean(input: Record<string, any>) {
+  const out: Record<string, any> = {}
+  for (const k of EDITABLE) if (k in input) out[k] = input[k] === '' ? null : input[k]
+  return out
+}
+
+function guard() {
+  if (!SERVICE) {
+    return NextResponse.json(
+      { error: 'Server is missing SUPABASE_SERVICE_ROLE_KEY. Add it in Vercel → Settings → Environment Variables (and .env.local for local dev), then redeploy.' },
+      { status: 500 },
+    )
+  }
+  return null
+}
+
+// Update one member by id.
+export async function PATCH(req: NextRequest) {
+  const g = guard(); if (g) return g
+  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const { id, updates } = await req.json().catch(() => ({}))
+  if (!id || !updates) return NextResponse.json({ error: 'id and updates are required' }, { status: 400 })
+  const patch = { ...clean(updates), updated_at: new Date().toISOString() }
+  const { data, error } = await admin().from('members').update(patch).eq('id', id).select().single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ member: data })
+}
+
+// Create a new member (e.g. a walk-up who joined in person).
+export async function POST(req: NextRequest) {
+  const g = guard(); if (g) return g
+  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const { member } = await req.json().catch(() => ({}))
+  if (!member?.full_name) return NextResponse.json({ error: 'full_name is required' }, { status: 400 })
+  const row = { ...clean(member), updated_at: new Date().toISOString() }
+  const { data, error } = await admin().from('members').insert(row).select().single()
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ member: data })
+}
+
+// Delete a member by id (?id=...).
+export async function DELETE(req: NextRequest) {
+  const g = guard(); if (g) return g
+  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const id = new URL(req.url).searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
+  const { error } = await admin().from('members').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  return NextResponse.json({ ok: true })
+}
