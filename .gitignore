@@ -5,3 +5,6 @@ out/
 .env.local.backup
 .DS_Store
 *.log
+
+# Next.js generated
+next-env.d.ts
