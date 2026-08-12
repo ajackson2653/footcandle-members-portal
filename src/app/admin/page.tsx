@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { getCurrentUser, signOut } from '@/lib/supabase'
 import Link from 'next/link'
-import { LogOut, Film, Mail, Bell, Inbox, Users } from 'lucide-react'
+import { LogOut, Film, Mail, Bell, Inbox, Users, MapPin } from 'lucide-react'
 
 export default function AdminDashboard() {
   const [user, setUser] = useState<any>(null)
@@ -54,6 +54,12 @@ export default function AdminDashboard() {
             <Film size={32} />
             <h2>Film Screenings</h2>
             <p>Create monthly film announcements</p>
+          </Link>
+
+          <Link href="/admin/community-events" style={styles.card}>
+            <MapPin size={32} />
+            <h2>Community Events</h2>
+            <p>Promote non-Footcandle screenings in the area</p>
           </Link>
 
           <Link href="/admin/renewal-reminders" style={styles.card}>

@@ -13,6 +13,22 @@ export interface Member {
   updated_at: string
 }
 
+export interface CommunityEvent {
+  id: string
+  title: string
+  description: string | null
+  poster_url: string | null
+  event_date: string
+  event_time: string | null
+  venue: string | null
+  location_city: string | null
+  address: string | null
+  host_org: string | null
+  link_url: string | null
+  published: boolean
+  created_at: string
+}
+
 export interface Event {
   id: string
   title: string
