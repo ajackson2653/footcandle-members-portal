@@ -3,6 +3,7 @@
 // If the list is empty (not configured yet), admin stays open to any logged-in
 // user — same as before — so nobody gets locked out during setup.
 export const ADMIN_EMAILS = (process.env.NEXT_PUBLIC_ADMIN_EMAILS || '')
+  .replace(/["']/g, '') // tolerate accidental surrounding quotes in the env value
   .split(',')
   .map((s) => s.trim().toLowerCase())
   .filter(Boolean)
