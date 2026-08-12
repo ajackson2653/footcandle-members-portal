@@ -56,6 +56,7 @@ interface CheckIn {
 export default function Dashboard() {
   const router = useRouter()
   const [member, setMember] = useState<Member | null>(null)
+  const [household, setHousehold] = useState<Member[]>([])
   const [checkIns, setCheckIns] = useState<CheckIn[]>([])
   const [filmScreenings, setFilmScreenings] = useState<FilmScreening[]>([])
   const [announcements, setAnnouncements] = useState<Announcement[]>([])
@@ -78,18 +79,22 @@ export default function Dashboard() {
         return
       }
 
-      // Load member data
-      const { data: memberData, error: memberError } = await supabase
+      // Load member data. Households can share one email (up to 4 people),
+      // so fetch all matching rows and use the one with the furthest renewal
+      // date (preferring an active membership) as the primary.
+      const { data: memberRows, error: memberError } = await supabase
         .from('members')
         .select('*')
         .eq('email', user.email)
-        .single()
+        .order('renewal_date', { ascending: false })
 
-      if (memberError) {
-        throw new Error('Failed to load member data')
+      if (memberError || !memberRows || memberRows.length === 0) {
+        throw new Error('We could not find a membership for this email address.')
       }
 
+      const memberData = memberRows.find((m: any) => m.status === 'active') || memberRows[0]
       setMember(memberData)
+      setHousehold(memberRows)
 
       // Load check-ins with event details
       const { data: checkInData } = await supabase
@@ -158,8 +163,8 @@ export default function Dashboard() {
     router.push('/login')
   }
 
-  async function handleRenewal() {
-    window.open('https://footcandlemembers.eventive.org/subscriptions', '_blank')
+  function handleRenewal() {
+    router.push('/renew')
   }
 
   if (loading) {
@@ -217,6 +222,22 @@ export default function Dashboard() {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-8">
+        {/* Big, obvious renewal call-to-action when expired */}
+        {isExpired && (
+          <div className="bg-white border-2 border-red-200 rounded-2xl p-6 md:p-8 mb-8 flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-bold text-gray-900">Your membership has expired</h2>
+              <p className="text-lg text-gray-600 mt-1">Renew now to keep enjoying Footcandle screenings.</p>
+            </div>
+            <button
+              onClick={handleRenewal}
+              className="bg-purple-600 text-white text-lg font-bold px-8 py-4 rounded-xl hover:bg-purple-700 transition whitespace-nowrap"
+            >
+              Renew Your Membership →
+            </button>
+          </div>
+        )}
+
         {/* Status Cards */}
         <div className="grid md:grid-cols-3 gap-4 mb-8">
           {/* Membership Status */}
@@ -238,7 +259,12 @@ export default function Dashboard() {
               <span className="text-gray-600 text-sm">{member.membership_type}</span>
             </div>
             {member.autorenew && (
-              <p className="text-sm text-gray-600 mt-3">Auto-renew: Enabled</p>
+              <p className="text-sm text-gray-600 mt-3">Renews automatically each year</p>
+            )}
+            {household.length > 1 && (
+              <p className="text-sm text-gray-600 mt-3">
+                Covers: {household.map((m) => m.full_name).join(', ')}
+              </p>
             )}
           </div>
 
@@ -273,7 +299,7 @@ export default function Dashboard() {
               <h2 className="text-lg font-semibold">Screenings Attended</h2>
             </div>
             <p className="text-4xl font-bold text-purple-600">{checkIns.length}</p>
-            <p className="text-sm text-gray-600 mt-2">lifetime check-ins</p>
+            <p className="text-sm text-gray-600 mt-2">films you've attended with us</p>
           </div>
         </div>
 
