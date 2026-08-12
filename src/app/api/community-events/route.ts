@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON } from '@/lib/supabaseConfig'
+import { isAdmin } from '@/lib/admin'
 
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -24,6 +25,13 @@ async function requireUser(req: NextRequest) {
   if (!token) return null
   const { data } = await createClient(SUPABASE_URL, SUPABASE_ANON).auth.getUser(token)
   return data.user
+}
+
+async function requireAdmin(req: NextRequest) {
+  const user = await requireUser(req)
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  if (!isAdmin(user.email)) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  return null
 }
 
 function clean(input: Record<string, any>) {
@@ -44,7 +52,7 @@ function guard() {
 
 export async function POST(req: NextRequest) {
   const g = guard(); if (g) return g
-  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const denied = await requireAdmin(req); if (denied) return denied
   const { event } = await req.json().catch(() => ({}))
   if (!event?.title || !event?.event_date) return NextResponse.json({ error: 'title and event_date are required' }, { status: 400 })
   const { data, error } = await admin().from('community_events').insert(clean(event)).select().single()
@@ -54,7 +62,7 @@ export async function POST(req: NextRequest) {
 
 export async function PATCH(req: NextRequest) {
   const g = guard(); if (g) return g
-  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const denied = await requireAdmin(req); if (denied) return denied
   const { id, updates } = await req.json().catch(() => ({}))
   if (!id || !updates) return NextResponse.json({ error: 'id and updates are required' }, { status: 400 })
   const { data, error } = await admin().from('community_events').update(clean(updates)).eq('id', id).select().single()
@@ -64,7 +72,7 @@ export async function PATCH(req: NextRequest) {
 
 export async function DELETE(req: NextRequest) {
   const g = guard(); if (g) return g
-  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const denied = await requireAdmin(req); if (denied) return denied
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
   const { error } = await admin().from('community_events').delete().eq('id', id)

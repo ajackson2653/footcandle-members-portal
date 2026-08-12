@@ -11,6 +11,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON } from '@/lib/supabaseConfig'
+import { isAdmin } from '@/lib/admin'
 
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY
 
@@ -29,6 +30,15 @@ async function requireUser(req: NextRequest) {
   if (!token) return null
   const { data } = await createClient(SUPABASE_URL, SUPABASE_ANON).auth.getUser(token)
   return data.user
+}
+
+// Require a logged-in admin. Returns a NextResponse to short-circuit on failure,
+// or null when the caller is an allowed admin.
+async function requireAdmin(req: NextRequest) {
+  const user = await requireUser(req)
+  if (!user) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  if (!isAdmin(user.email)) return NextResponse.json({ error: 'Not authorized' }, { status: 403 })
+  return null
 }
 
 function clean(input: Record<string, any>) {
@@ -50,7 +60,7 @@ function guard() {
 // Update one member by id.
 export async function PATCH(req: NextRequest) {
   const g = guard(); if (g) return g
-  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const denied = await requireAdmin(req); if (denied) return denied
   const { id, updates } = await req.json().catch(() => ({}))
   if (!id || !updates) return NextResponse.json({ error: 'id and updates are required' }, { status: 400 })
   const patch = { ...clean(updates), updated_at: new Date().toISOString() }
@@ -62,7 +72,7 @@ export async function PATCH(req: NextRequest) {
 // Create a new member (e.g. a walk-up who joined in person).
 export async function POST(req: NextRequest) {
   const g = guard(); if (g) return g
-  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const denied = await requireAdmin(req); if (denied) return denied
   const { member } = await req.json().catch(() => ({}))
   if (!member?.full_name) return NextResponse.json({ error: 'full_name is required' }, { status: 400 })
   const row = { ...clean(member), updated_at: new Date().toISOString() }
@@ -74,7 +84,7 @@ export async function POST(req: NextRequest) {
 // Delete a member by id (?id=...).
 export async function DELETE(req: NextRequest) {
   const g = guard(); if (g) return g
-  if (!(await requireUser(req))) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 })
+  const denied = await requireAdmin(req); if (denied) return denied
   const id = new URL(req.url).searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
   const { error } = await admin().from('members').delete().eq('id', id)

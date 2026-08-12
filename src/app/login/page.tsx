@@ -1,92 +1,121 @@
 'use client'
 
 import { useState } from 'react'
-import { signInWithMagicLink } from '@/lib/supabase'
+import { signInWithPassword, signUpWithPassword, signInWithMagicLink } from '@/lib/supabase'
 
-// Passwordless login: members type their email and get a one-click sign-in
-// link. No password to remember — the single biggest ease-of-use win for our
-// older, less tech-savvy members.
+// Login offers both: a password (sign in or create one) AND a passwordless
+// "email me a sign-in link" option — which also serves as the forgot-password
+// fallback. Kept large and plain for less tech-savvy members.
 export default function LoginPage() {
+  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
-  const [sent, setSent] = useState(false)
   const [error, setError] = useState('')
+  const [notice, setNotice] = useState('')
+  const [linkSent, setLinkSent] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handlePassword = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError('')
+    setError(''); setNotice(''); setLoading(true)
+    if (mode === 'signup') {
+      const { data, error } = await signUpWithPassword(email.trim(), password)
+      setLoading(false)
+      if (error) { setError(error.message); return }
+      if (data.session) { window.location.href = '/dashboard'; return }
+      setNotice('Almost done — check your email to confirm your account, then come back and sign in.')
+    } else {
+      const { error } = await signInWithPassword(email.trim(), password)
+      setLoading(false)
+      if (error) { setError('That email and password didn’t match. Try again, choose “Create a password” if you’re new, or use the email sign-in link below.'); return }
+      window.location.href = '/dashboard'
+    }
+  }
+
+  const handleMagicLink = async () => {
+    setError(''); setNotice('')
+    if (!email.includes('@')) { setError('Enter your email above first, then tap the link button.'); return }
     setLoading(true)
     const { error } = await signInWithMagicLink(email.trim())
     setLoading(false)
     if (error) setError(error.message)
-    else setSent(true)
+    else setLinkSent(true)
+  }
+
+  if (linkSent) {
+    return (
+      <div style={s.container}><div style={s.card}>
+        <div style={{ fontSize: 52 }}>✉️</div>
+        <h2 style={s.sentTitle}>Check your email</h2>
+        <p style={s.sentText}>We sent a sign-in link to<br /><strong>{email}</strong>.</p>
+        <p style={s.sentText}>Open that email and tap the link to sign in — no password needed.</p>
+        <button onClick={() => setLinkSent(false)} style={s.linkText}>Back to sign in</button>
+      </div></div>
+    )
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h1 style={styles.title}>Footcandle Film Society</h1>
-        <p style={styles.subtitle}>Members</p>
+    <div style={s.container}>
+      <div style={s.card}>
+        <h1 style={s.title}>Footcandle Film Society</h1>
+        <p style={s.subtitle}>Members</p>
 
-        {sent ? (
-          <div>
-            <div style={styles.checkIcon}>✉️</div>
-            <h2 style={styles.sentTitle}>Check your email</h2>
-            <p style={styles.sentText}>
-              We just sent a sign-in link to<br /><strong>{email}</strong>.
-            </p>
-            <p style={styles.sentText}>Open that email and tap the link to sign in. That's it — no password needed.</p>
-            <button onClick={() => { setSent(false); setEmail('') }} style={styles.linkButton}>
-              Use a different email
-            </button>
-          </div>
-        ) : (
-          <>
-            <p style={styles.description}>
-              Enter your email and we'll send you a link to sign in.
-              <br /><strong>No password needed.</strong>
-            </p>
-            <form onSubmit={handleSubmit}>
-              <label style={styles.label}>Your email address</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="you@example.com"
-                required
-                autoFocus
-                style={styles.input}
-                disabled={loading}
-              />
-              {error && <p style={styles.error}>{error}</p>}
-              <button type="submit" disabled={loading} style={{ ...styles.button, opacity: loading ? 0.6 : 1 }}>
-                {loading ? 'Sending…' : 'Email me a sign-in link'}
-              </button>
-            </form>
-            <p style={styles.help}>
-              Need help? Email us at <a href="mailto:info@footcandle.org" style={styles.helpLink}>info@footcandle.org</a>
-            </p>
-          </>
-        )}
+        <form onSubmit={handlePassword}>
+          <label style={s.label}>Email address</label>
+          <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required autoFocus style={s.input} disabled={loading} />
+
+          <label style={s.label}>{mode === 'signup' ? 'Choose a password' : 'Password'}</label>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder={mode === 'signup' ? 'At least 6 characters' : 'Your password'} required minLength={6} style={s.input} disabled={loading} />
+
+          {error && <p style={s.error}>{error}</p>}
+          {notice && <p style={s.notice}>{notice}</p>}
+
+          <button type="submit" disabled={loading} style={{ ...s.button, opacity: loading ? 0.6 : 1 }}>
+            {loading ? 'Please wait…' : mode === 'signup' ? 'Create my account' : 'Sign In'}
+          </button>
+        </form>
+
+        <p style={s.toggle}>
+          {mode === 'signin' ? (
+            <>First time here? <button onClick={() => { setMode('signup'); setError(''); setNotice('') }} style={s.toggleBtn}>Create a password</button></>
+          ) : (
+            <>Already have a password? <button onClick={() => { setMode('signin'); setError(''); setNotice('') }} style={s.toggleBtn}>Sign in</button></>
+          )}
+        </p>
+
+        <div style={s.divider}><span style={s.dividerLine} /><span style={s.dividerText}>or</span><span style={s.dividerLine} /></div>
+
+        <button onClick={handleMagicLink} disabled={loading} style={s.linkButton}>
+          Email me a sign-in link (no password)
+        </button>
+
+        <p style={s.help}>Forgot your password? Use the email link above. Need help? <a href="mailto:info@footcandle.org" style={s.helpLink}>info@footcandle.org</a></p>
       </div>
     </div>
   )
 }
 
-const styles: Record<string, React.CSSProperties> = {
+const s: Record<string, React.CSSProperties> = {
   container: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: 20 },
   card: { background: 'white', borderRadius: 16, padding: 40, maxWidth: 460, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center' },
-  title: { fontSize: 30, fontWeight: 800, marginBottom: 2, color: '#1f2937' },
-  subtitle: { fontSize: 16, color: '#6b7280', marginBottom: 28 },
-  description: { fontSize: 18, color: '#374151', marginBottom: 28, lineHeight: 1.6 },
-  label: { display: 'block', fontSize: 16, fontWeight: 600, marginBottom: 10, color: '#1f2937', textAlign: 'left' },
-  input: { width: '100%', padding: '16px', border: '2px solid #d1d5db', borderRadius: 10, fontSize: 18, fontFamily: 'inherit', marginBottom: 20 },
-  button: { width: '100%', padding: '16px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontSize: 18, fontWeight: 700, cursor: 'pointer' },
-  error: { color: '#dc2626', fontSize: 15, marginBottom: 16, padding: 12, background: '#fee2e2', borderRadius: 8, textAlign: 'left' },
-  help: { fontSize: 15, color: '#6b7280', marginTop: 24, lineHeight: 1.5 },
+  title: { fontSize: 28, fontWeight: 800, marginBottom: 2, color: '#1f2937' },
+  subtitle: { fontSize: 16, color: '#6b7280', marginBottom: 24 },
+  label: { display: 'block', fontSize: 15, fontWeight: 600, margin: '0 0 8px', color: '#1f2937', textAlign: 'left' },
+  input: { width: '100%', padding: '15px', border: '2px solid #d1d5db', borderRadius: 10, fontSize: 17, fontFamily: 'inherit', marginBottom: 18 },
+  button: { width: '100%', padding: '15px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontSize: 17, fontWeight: 700, cursor: 'pointer' },
+  toggle: { fontSize: 15, color: '#4b5563', marginTop: 18 },
+  toggleBtn: { background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', fontSize: 15, textDecoration: 'underline' },
+  divider: { display: 'flex', alignItems: 'center', margin: '22px 0 18px', color: '#9ca3af' },
+  dividerLine: { flex: 1, height: 1, background: '#e5e7eb' },
+  dividerText: { flex: 'none', padding: '0 12px', fontSize: 14 },
+  linkButton: { width: '100%', padding: '14px', background: 'white', color: '#2563eb', border: '2px solid #2563eb', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' },
+  linkText: { background: 'none', border: 'none', color: '#2563eb', fontSize: 16, fontWeight: 600, cursor: 'pointer', marginTop: 12, textDecoration: 'underline' },
+  error: { color: '#dc2626', fontSize: 15, marginBottom: 14, padding: 12, background: '#fee2e2', borderRadius: 8, textAlign: 'left', lineHeight: 1.5 },
+  notice: { color: '#065f46', fontSize: 15, marginBottom: 14, padding: 12, background: '#d1fae5', borderRadius: 8, textAlign: 'left', lineHeight: 1.5 },
+  help: { fontSize: 14, color: '#6b7280', marginTop: 22, lineHeight: 1.5 },
   helpLink: { color: '#2563eb', fontWeight: 600 },
-  checkIcon: { fontSize: 52, marginBottom: 8 },
-  sentTitle: { fontSize: 24, fontWeight: 800, color: '#1f2937', marginBottom: 14 },
-  sentText: { fontSize: 18, color: '#374151', lineHeight: 1.6, marginBottom: 16 },
-  linkButton: { background: 'none', border: 'none', color: '#2563eb', fontSize: 16, fontWeight: 600, cursor: 'pointer', marginTop: 8, textDecoration: 'underline' },
+  sentTitle: { fontSize: 24, fontWeight: 800, color: '#1f2937', margin: '8px 0 14px' },
+  sentText: { fontSize: 17, color: '#374151', lineHeight: 1.6, marginBottom: 14 },
 }
+
+// horizontal rule lines around "or"
