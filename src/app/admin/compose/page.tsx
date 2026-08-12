@@ -26,6 +26,7 @@ export default function ComposeEmail() {
   const [body, setBody] = useState('')
   const [counts, setCounts] = useState<Record<string, number>>({})
   const [films, setFilms] = useState<UpcomingFilm[]>([])
+  const [testEmail, setTestEmail] = useState('')
   const [busy, setBusy] = useState(false)
   const [msg, setMsg] = useState<{ text: string; ok: boolean } | null>(null)
 
@@ -33,6 +34,7 @@ export default function ComposeEmail() {
     ;(async () => {
       const u = await supabase.auth.getUser()
       if (!u.data.user) { window.location.href = '/login'; return }
+      setTestEmail(u.data.user.email || '')
 
       const total = await supabase.from('members').select('email', { count: 'exact', head: true }).not('email', 'is', null)
       const active = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'active').not('email', 'is', null)
@@ -66,6 +68,30 @@ export default function ComposeEmail() {
     ].filter(Boolean)
     const block = `\n\n${lines.join('\n')}\n`
     setBody((b) => (b + block).replace(/^\n+/, ''))
+  }
+
+  async function sendTest() {
+    if (!subject.trim() || !body.trim()) { setMsg({ text: 'Add a subject and message first, then send a test.', ok: false }); return }
+    if (!testEmail.includes('@')) { setMsg({ text: 'Enter a valid email to send the test to.', ok: false }); return }
+    setBusy(true); setMsg(null)
+    try {
+      const { data: row, error } = await supabase
+        .from('email_queue')
+        .insert({ email_type: 'test', recipient_email: testEmail, subject: `[TEST] ${subject}`, body, status: 'draft', metadata: { test: true } })
+        .select().single()
+      if (error) throw error
+      const { data: sess } = await supabase.auth.getSession()
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess.session?.access_token || ''}` },
+        body: JSON.stringify({ id: row.id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Send failed')
+      setMsg({ text: `✓ Test sent to ${testEmail}. Check your inbox (it won't go to any members).`, ok: true })
+    } catch (e) {
+      setMsg({ text: e instanceof Error ? e.message : 'Failed', ok: false })
+    } finally { setBusy(false) }
   }
 
   async function draft(sendNow: boolean) {
@@ -140,9 +166,18 @@ export default function ComposeEmail() {
           </div>
           <textarea style={{ ...s.input, minHeight: 220, marginTop: 8, resize: 'vertical', fontFamily: 'inherit' }} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your announcement… use “Insert a film screening” to spotlight a specific film." />
 
+          <div style={s.testBox}>
+            <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937', marginBottom: 8 }}>Send a test to yourself first</div>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <input value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="your@email.com" style={{ ...s.input, flex: 1, minWidth: 200 }} />
+              <button onClick={sendTest} disabled={busy} style={s.testBtn}>Send test to me</button>
+            </div>
+            <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Goes only to this address — no members are emailed.</p>
+          </div>
+
           <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap', alignItems: 'center' }}>
             <button onClick={() => draft(true)} disabled={busy} style={{ ...s.primaryBtn, opacity: busy ? 0.6 : 1 }}>
-              <Send size={16} /> {busy ? 'Working…' : `Send now to ${recipientCount}`}
+              <Send size={16} /> {busy ? 'Working…' : `Send now to ${recipientCount} member${recipientCount === 1 ? '' : 's'}`}
             </button>
             <button onClick={() => draft(false)} disabled={busy} style={s.secondaryBtn}><FileText size={16} /> Save draft</button>
           </div>
@@ -169,4 +204,6 @@ const s: Record<string, React.CSSProperties> = {
   secondaryBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '11px 16px', background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 6, fontSize: 14, cursor: 'pointer' },
   message: { padding: '12px 14px', borderRadius: 8, marginBottom: 16, fontSize: 14 },
   note: { fontSize: 12, color: '#9ca3af', marginTop: 12 },
+  testBox: { marginTop: 20, padding: 16, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10 },
+  testBtn: { padding: '10px 16px', background: '#1f2937', color: 'white', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
 }
