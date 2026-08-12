@@ -40,13 +40,19 @@ export default function EmailQueueAdmin() {
   }
 
   const handleSend = async (id: string) => {
+    if (!confirm('Send this email to its recipients now? This delivers real email via Brevo.')) return
+    setMessage('Sending…')
     try {
-      await supabase
-        .from('email_queue')
-        .update({ status: 'sent', sent_at: new Date().toISOString() })
-        .eq('id', id)
-
-      setMessage('✓ Email marked as sent (actual sending requires email service)')
+      const { data } = await supabase.auth.getSession()
+      const token = data.session?.access_token || ''
+      const res = await fetch('/api/send-email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ id }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Send failed')
+      setMessage(`✓ Sent to ${json.sent} recipient${json.sent === 1 ? '' : 's'}.`)
       loadEmails()
     } catch (err) {
       setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
