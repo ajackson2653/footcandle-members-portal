@@ -10,9 +10,8 @@
 // ════════════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { SUPABASE_URL, SUPABASE_ANON } from '@/lib/supabaseConfig'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY
 
 // Fields an admin may set. Anything else in the payload is ignored.
@@ -28,7 +27,7 @@ function admin() {
 async function requireUser(req: NextRequest) {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
   if (!token) return null
-  const { data } = await createClient(SUPABASE_URL, ANON).auth.getUser(token)
+  const { data } = await createClient(SUPABASE_URL, SUPABASE_ANON).auth.getUser(token)
   return data.user
 }
 

@@ -4,8 +4,8 @@
 // Requires SUPABASE_SERVICE_ROLE_KEY + BREVO_API_KEY.
 // ════════════════════════════════════════════════════════════════════
 import { createClient } from '@supabase/supabase-js'
+import { SUPABASE_URL } from '@/lib/supabaseConfig'
 
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 const SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'info@footcandle.org'

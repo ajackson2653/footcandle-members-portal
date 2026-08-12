@@ -5,14 +5,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { sendQueued } from '@/lib/email'
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!
-const ANON = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+import { SUPABASE_URL, SUPABASE_ANON } from '@/lib/supabaseConfig'
 
 async function requireUser(req: NextRequest) {
   const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
   if (!token) return null
-  const { data } = await createClient(SUPABASE_URL, ANON).auth.getUser(token)
+  const { data } = await createClient(SUPABASE_URL, SUPABASE_ANON).auth.getUser(token)
   return data.user
 }
 
