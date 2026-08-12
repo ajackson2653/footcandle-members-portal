@@ -43,7 +43,7 @@ export default function MembersManager() {
     ;(async () => {
       const user = await supabase.auth.getUser()
       if (!user.data.user) {
-        window.location.href = '/'
+        window.location.href = '/login'
         return
       }
       await load()

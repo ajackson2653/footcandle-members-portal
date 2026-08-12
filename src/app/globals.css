@@ -11,3 +11,12 @@ body {
   background: #f5f5f5;
   color: #333;
 }
+
+/* Public homepage responsive helpers (inline styles set the mobile default). */
+@media (min-width: 768px) {
+  .hero-grid { grid-template-columns: 1.3fr 0.7fr !important; }
+  .podcast-grid { grid-template-columns: 1fr 1fr !important; }
+}
+@media (max-width: 640px) {
+  .nav-hide { display: none !important; }
+}

@@ -15,7 +15,7 @@ export default function AdminDashboard() {
       // For now, any logged-in user can access admin
       // TODO: Add proper admin role checking
       if (!currentUser) {
-        window.location.href = '/'
+        window.location.href = '/login'
       } else {
         setUser(currentUser)
       }
@@ -33,7 +33,7 @@ export default function AdminDashboard() {
         <button
           onClick={() => {
             signOut()
-            window.location.href = '/'
+            window.location.href = '/login'
           }}
           style={styles.logoutBtn}
         >

@@ -74,7 +74,7 @@ export default function Dashboard() {
       } = await supabase.auth.getUser()
 
       if (!user) {
-        router.push('/')
+        router.push('/login')
         return
       }
 
@@ -155,7 +155,7 @@ export default function Dashboard() {
 
   async function handleLogout() {
     await supabase.auth.signOut()
-    router.push('/')
+    router.push('/login')
   }
 
   async function handleRenewal() {
