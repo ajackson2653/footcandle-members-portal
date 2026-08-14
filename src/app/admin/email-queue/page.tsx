@@ -3,69 +3,95 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { ArrowLeft, Send, Trash2 } from 'lucide-react'
+import { ArrowLeft, Send, Trash2, Pencil, Save, X } from 'lucide-react'
 
 interface Email {
   id: string
   email_type: string
   subject: string
+  body: string
   status: string
+  recipient_email: string | null
+  recipient_filter: string | null
   created_at: string
   metadata?: any
+}
+
+const AUDIENCE_LABELS: Record<string, string> = {
+  all_members: 'All members', all_active: 'Active members', all_expired: 'Expired members',
+  expired_12mo: 'Expired in last 12 months', expired_12mo_not_recent: 'Expired 12 mo (not last 30 days)',
+  expired_last_30: 'Expired in last 30 days',
 }
 
 export default function EmailQueueAdmin() {
   const [emails, setEmails] = useState<Email[]>([])
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editSubject, setEditSubject] = useState('')
+  const [editBody, setEditBody] = useState('')
+  const [busy, setBusy] = useState(false)
 
-  useEffect(() => {
-    loadEmails()
-  }, [])
+  useEffect(() => { loadEmails() }, [])
+
+  async function token() { const { data } = await supabase.auth.getSession(); return data.session?.access_token || '' }
 
   const loadEmails = async () => {
     try {
-      const { data, error } = await supabase
-        .from('email_queue')
-        .select('*')
-        .order('created_at', { ascending: false })
-
+      const { data, error } = await supabase.from('email_queue').select('*').order('created_at', { ascending: false })
       if (error) throw error
       setEmails(data || [])
     } catch (err) {
       setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    } finally {
-      setLoading(false)
-    }
+    } finally { setLoading(false) }
+  }
+
+  function startEdit(e: Email) {
+    setEditId(e.id); setEditSubject(e.subject || ''); setEditBody(e.body || ''); setMessage('')
+  }
+  function cancelEdit() { setEditId(null); setEditSubject(''); setEditBody('') }
+
+  async function saveEdit(id: string) {
+    if (!editSubject.trim() || !editBody.trim()) { setMessage('Subject and message are required.'); return }
+    setBusy(true); setMessage('')
+    try {
+      const res = await fetch('/api/email-queue', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` },
+        body: JSON.stringify({ id, updates: { subject: editSubject, body: editBody } }),
+      })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(json.error || 'Save failed')
+      cancelEdit(); await loadEmails(); setMessage('✓ Draft updated.')
+    } catch (err) { setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`) } finally { setBusy(false) }
   }
 
   const handleSend = async (id: string) => {
     if (!confirm('Send this email to its recipients now? This delivers real email via Brevo.')) return
-    setMessage('Sending…')
+    setBusy(true); setMessage('Sending…')
     try {
-      const { data } = await supabase.auth.getSession()
-      const token = data.session?.access_token || ''
-      const res = await fetch('/api/send-email', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ id }),
-      })
+      const res = await fetch('/api/send-email', { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${await token()}` }, body: JSON.stringify({ id }) })
       const json = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(json.error || 'Send failed')
       setMessage(`✓ Sent to ${json.sent} recipient${json.sent === 1 ? '' : 's'}.`)
-      loadEmails()
-    } catch (err) {
-      setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    }
+      await loadEmails()
+    } catch (err) { setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`) } finally { setBusy(false) }
   }
 
   const handleDelete = async (id: string) => {
+    if (!confirm('Delete this email from the queue?')) return
+    setBusy(true)
     try {
-      await supabase.from('email_queue').delete().eq('id', id)
-      loadEmails()
-    } catch (err) {
-      setMessage(`Error: ${err instanceof Error ? err.message : 'Unknown error'}`)
-    }
+      const res = await fetch(`/api/email-queue?id=${encodeURIComponent(id)}`, { method: 'DELETE', headers: { Authorization: `Bearer ${await token()}` } })
+      if (!res.ok) throw new Error()
+      await loadEmails()
+    } catch { setMessage('Could not delete.') } finally { setBusy(false) }
+  }
+
+  function audienceOf(e: Email) {
+    if (e.recipient_filter && AUDIENCE_LABELS[e.recipient_filter]) return AUDIENCE_LABELS[e.recipient_filter]
+    if (e.recipient_email) { const n = e.recipient_email.split(/[,;]/).filter((x) => x.includes('@')).length; return n === 1 ? e.recipient_email : `${n} recipients` }
+    return e.recipient_filter || '—'
   }
 
   if (loading) return <div style={styles.loading}>Loading emails...</div>
@@ -73,159 +99,86 @@ export default function EmailQueueAdmin() {
   return (
     <div style={styles.container}>
       <header style={styles.header}>
-        <Link href="/admin" style={styles.backLink}>
-          <ArrowLeft size={20} />
-          Back to Admin
-        </Link>
+        <Link href="/admin" style={styles.backLink}><ArrowLeft size={20} /> Back to Admin</Link>
         <h1>Email Queue</h1>
-        <div style={{ width: '120px' }} />
+        <div style={{ width: 110 }} />
       </header>
 
       <main style={styles.main}>
-        <div style={styles.card}>
-          {message && (
-            <div style={{
-              ...styles.message,
-              background: message.includes('Error') ? '#fee2e2' : '#d1fae5',
-              color: message.includes('Error') ? '#7f1d1d' : '#065f46'
-            }}>
-              {message}
-            </div>
-          )}
+        {message && <div style={{ ...styles.message, background: message.includes('Error') || message.includes('Could') ? '#fee2e2' : '#d1fae5', color: message.includes('Error') || message.includes('Could') ? '#7f1d1d' : '#065f46' }}>{message}</div>}
 
-          {emails.length === 0 ? (
-            <p style={styles.noData}>No emails in queue</p>
-          ) : (
-            <div style={styles.emailsList}>
-              {emails.map(email => (
-                <div key={email.id} style={styles.emailItem}>
-                  <div style={styles.emailContent}>
-                    <p style={styles.emailType}>{email.email_type}</p>
-                    <p style={styles.emailSubject}>{email.subject}</p>
-                    <p style={styles.emailDate}>
-                      {new Date(email.created_at).toLocaleDateString()} 
-                      • Status: <strong>{email.status}</strong>
-                    </p>
+        {emails.length === 0 ? <p style={styles.noData}>No emails in queue.</p> : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {emails.map((email) => (
+              <div key={email.id} style={styles.card}>
+                {editId === email.id ? (
+                  <div>
+                    <label style={styles.lbl}>Subject</label>
+                    <input value={editSubject} onChange={(e) => setEditSubject(e.target.value)} style={styles.input} />
+                    <label style={{ ...styles.lbl, marginTop: 12 }}>Message</label>
+                    <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} style={{ ...styles.input, minHeight: 220, resize: 'vertical', fontFamily: 'inherit' }} />
+                    <p style={styles.hint}>Personalized fields like <code>{'{{first_name}}'}</code> and the <code>{'{{renew_button}}'}</code> still work here.</p>
+                    <div style={{ display: 'flex', gap: 10, marginTop: 12 }}>
+                      <button onClick={() => saveEdit(email.id)} disabled={busy} style={styles.saveBtn}><Save size={16} /> Save draft</button>
+                      <button onClick={cancelEdit} style={styles.cancelBtn}><X size={16} /> Cancel</button>
+                    </div>
                   </div>
-                  <div style={styles.emailActions}>
-                    {email.status === 'draft' && (
-                      <button
-                        onClick={() => handleSend(email.id)}
-                        style={styles.sendBtn}
-                      >
-                        <Send size={16} />
-                        Send
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDelete(email.id)}
-                      style={styles.deleteBtn}
-                    >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                          <span style={{ ...styles.statusPill, ...(email.status === 'sent' ? styles.sentPill : email.status === 'failed' ? styles.failPill : styles.draftPill) }}>{email.status}</span>
+                          <span style={styles.type}>{email.email_type.replace(/_/g, ' ')}</span>
+                          <span style={styles.audience}>→ {audienceOf(email)}</span>
+                        </div>
+                        <p style={styles.subject}>{email.subject}</p>
+                        <p style={styles.preview}>{(email.body || '').replace(/\s+/g, ' ').slice(0, 160)}{(email.body || '').length > 160 ? '…' : ''}</p>
+                        <p style={styles.date}>{new Date(email.created_at).toLocaleString()}</p>
+                      </div>
+                      <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                        {email.status === 'draft' && <>
+                          <button onClick={() => startEdit(email)} style={styles.editBtn} title="Edit draft"><Pencil size={15} /> Edit</button>
+                          <button onClick={() => handleSend(email.id)} disabled={busy} style={styles.sendBtn}><Send size={15} /> Send</button>
+                        </>}
+                        <button onClick={() => handleDelete(email.id)} disabled={busy} style={styles.deleteBtn} title="Delete"><Trash2 size={15} /></button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </main>
     </div>
   )
 }
 
-const styles = {
+const styles: Record<string, React.CSSProperties> = {
   container: { minHeight: '100vh', background: '#f9fafb' },
-  header: {
-    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-    color: 'white',
-    padding: '20px',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  backLink: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    color: 'white',
-    textDecoration: 'none',
-    cursor: 'pointer'
-  },
-  main: { maxWidth: '900px', margin: '40px auto', padding: '0 20px' },
-  card: {
-    background: 'white',
-    borderRadius: '12px',
-    padding: '30px',
-    boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
-  },
-  emailsList: {
-    border: '1px solid #e5e7eb',
-    borderRadius: '8px'
-  },
-  emailItem: {
-    padding: '20px',
-    borderBottom: '1px solid #e5e7eb',
-    display: 'flex',
-    justifyContent: 'space-between',
-    alignItems: 'center'
-  },
-  emailContent: {
-    flex: 1
-  },
-  emailType: {
-    fontSize: '12px',
-    color: '#6b7280',
-    textTransform: 'uppercase' as const,
-    fontWeight: '600' as const
-  },
-  emailSubject: {
-    fontSize: '16px',
-    fontWeight: '600' as const,
-    color: '#1f2937',
-    marginBottom: '4px'
-  },
-  emailDate: {
-    fontSize: '13px',
-    color: '#6b7280'
-  },
-  emailActions: {
-    display: 'flex',
-    gap: '8px'
-  },
-  sendBtn: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    padding: '8px 12px',
-    background: '#10b981',
-    color: 'white',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer',
-    fontSize: '13px'
-  },
-  deleteBtn: {
-    padding: '8px 12px',
-    background: '#fee2e2',
-    color: '#7f1d1d',
-    border: 'none',
-    borderRadius: '4px',
-    cursor: 'pointer'
-  },
-  message: {
-    padding: '12px',
-    borderRadius: '6px',
-    marginBottom: '16px'
-  },
-  noData: {
-    color: '#9ca3af',
-    fontStyle: 'italic'
-  },
-  loading: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh'
-  }
+  header: { background: 'linear-gradient(135deg, #2a5680 0%, #1e3f5f 100%)', color: 'white', padding: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  backLink: { display: 'flex', alignItems: 'center', gap: 8, color: 'white', textDecoration: 'none' },
+  main: { maxWidth: 860, margin: '32px auto', padding: '0 20px' },
+  card: { background: 'white', borderRadius: 10, padding: 18, boxShadow: '0 1px 3px rgba(0,0,0,0.08)' },
+  statusPill: { fontSize: 11, fontWeight: 700, textTransform: 'uppercase', padding: '2px 8px', borderRadius: 999 },
+  draftPill: { background: '#fef3c7', color: '#92400e' },
+  sentPill: { background: '#d1fae5', color: '#065f46' },
+  failPill: { background: '#fee2e2', color: '#7f1d1d' },
+  type: { fontSize: 12, color: '#6b7280', textTransform: 'capitalize' },
+  audience: { fontSize: 12, color: '#2a5680', fontWeight: 600 },
+  subject: { fontSize: 16, fontWeight: 700, color: '#1f2937', margin: '8px 0 4px' },
+  preview: { fontSize: 13, color: '#6b7280', margin: 0 },
+  date: { fontSize: 12, color: '#9ca3af', marginTop: 6 },
+  lbl: { display: 'block', fontSize: 13, fontWeight: 600, color: '#374151', marginBottom: 6 },
+  input: { width: '100%', padding: '10px 12px', border: '1px solid #d1d5db', borderRadius: 6, fontSize: 14 },
+  hint: { fontSize: 12, color: '#9ca3af', marginTop: 8 },
+  editBtn: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', background: '#eef3f8', color: '#2a5680', border: '1px solid #cfd8e3', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 },
+  sendBtn: { display: 'inline-flex', alignItems: 'center', gap: 5, padding: '7px 12px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 600 },
+  saveBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 16px', background: '#059669', color: 'white', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14, fontWeight: 600 },
+  cancelBtn: { display: 'inline-flex', alignItems: 'center', gap: 6, padding: '9px 14px', background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 6, cursor: 'pointer', fontSize: 14 },
+  deleteBtn: { display: 'inline-flex', alignItems: 'center', padding: '7px 10px', background: '#fee2e2', color: '#7f1d1d', border: 'none', borderRadius: 6, cursor: 'pointer' },
+  message: { padding: '12px 14px', borderRadius: 8, marginBottom: 16, fontSize: 14 },
+  noData: { color: '#9ca3af', fontStyle: 'italic' },
+  loading: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' },
 }
