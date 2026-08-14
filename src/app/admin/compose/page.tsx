@@ -1,11 +1,21 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { ArrowLeft, Send, FileText, Film } from 'lucide-react'
 
-type Audience = 'all_members' | 'all_active' | 'all_expired'
+type Audience = 'all_members' | 'all_active' | 'all_expired' | 'expired_12mo'
+
+const MERGE_FIELDS: { token: string; label: string }[] = [
+  { token: '{{first_name}}', label: 'First name' },
+  { token: '{{name}}', label: 'Full name' },
+  { token: '{{email}}', label: 'Email' },
+  { token: '{{expired_date}}', label: 'Expired date' },
+  { token: '{{renewal_date}}', label: 'Renewal date' },
+  { token: '{{autorenew}}', label: 'Auto-renew (Yes/No)' },
+  { token: '{{renew_button}}', label: 'Renew button' },
+]
 type UpcomingFilm = { id: string; title: string; description: string | null; date: string; time: string | null; venue: string | null; city: string | null }
 
 function fmtLong(dateStr: string, timeStr?: string | null) {
@@ -36,10 +46,13 @@ export default function ComposeEmail() {
       if (!u.data.user) { window.location.href = '/login'; return }
       setTestEmail(u.data.user.email || '')
 
+      const cutoff = new Date(); cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 1)
+      const cutoffStr = cutoff.toISOString().slice(0, 10)
       const total = await supabase.from('members').select('email', { count: 'exact', head: true }).not('email', 'is', null)
       const active = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'active').not('email', 'is', null)
       const expired = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'expired').not('email', 'is', null)
-      setCounts({ all_members: total.count || 0, all_active: active.count || 0, all_expired: expired.count || 0 })
+      const expired12 = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'expired').gte('renewal_date', cutoffStr).not('email', 'is', null)
+      setCounts({ all_members: total.count || 0, all_active: active.count || 0, all_expired: expired.count || 0, expired_12mo: expired12.count || 0 })
 
       const today = new Date().toISOString().slice(0, 10)
       const { data: fs } = await supabase
@@ -68,6 +81,17 @@ export default function ComposeEmail() {
     ].filter(Boolean)
     const block = `\n\n${lines.join('\n')}\n`
     setBody((b) => (b + block).replace(/^\n+/, ''))
+  }
+
+  const bodyRef = useRef<HTMLTextAreaElement>(null)
+  function insertToken(tok: string) {
+    const el = bodyRef.current
+    if (!el) { setBody((b) => b + tok); return }
+    const start = el.selectionStart ?? body.length
+    const end = el.selectionEnd ?? body.length
+    const next = body.slice(0, start) + tok + body.slice(end)
+    setBody(next)
+    setTimeout(() => { el.focus(); const p = start + tok.length; el.selectionStart = el.selectionEnd = p }, 0)
   }
 
   async function sendTest() {
@@ -142,7 +166,7 @@ export default function ComposeEmail() {
         <div style={s.card}>
           <label style={s.label}>Audience</label>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
-            {([['all_active', 'Active members'], ['all_members', 'All members'], ['all_expired', 'Expired members']] as [Audience, string][]).map(([val, lbl]) => (
+            {([['all_active', 'Active members'], ['all_members', 'All members'], ['all_expired', 'Expired members'], ['expired_12mo', 'Expired in last 12 months']] as [Audience, string][]).map(([val, lbl]) => (
               <button key={val} onClick={() => setAudience(val)} style={{ ...s.pill, ...(audience === val ? s.pillActive : {}) }}>
                 {lbl} <span style={{ opacity: 0.7 }}>({counts[val] ?? '…'})</span>
               </button>
@@ -164,7 +188,16 @@ export default function ComposeEmail() {
               </div>
             )}
           </div>
-          <textarea style={{ ...s.input, minHeight: 220, marginTop: 8, resize: 'vertical', fontFamily: 'inherit' }} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your announcement… use “Insert a film screening” to spotlight a specific film." />
+          <textarea ref={bodyRef} style={{ ...s.input, minHeight: 220, marginTop: 8, resize: 'vertical', fontFamily: 'inherit' }} value={body} onChange={(e) => setBody(e.target.value)} placeholder="Write your message… click a field below to personalize it per member." />
+
+          <div style={{ marginTop: 10 }}>
+            <div style={{ fontSize: 12.5, color: '#6b7280', marginBottom: 6 }}>Insert a personalized field (fills in per member when sent):</div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+              {MERGE_FIELDS.map((f) => (
+                <button key={f.token} onClick={() => insertToken(f.token)} style={s.mergeChip} title={`Inserts ${f.token}`}>{f.label}</button>
+              ))}
+            </div>
+          </div>
 
           <div style={s.testBox}>
             <div style={{ fontWeight: 600, fontSize: 14, color: '#1f2937', marginBottom: 8 }}>Send a test to yourself first</div>
@@ -172,7 +205,7 @@ export default function ComposeEmail() {
               <input value={testEmail} onChange={(e) => setTestEmail(e.target.value)} placeholder="your@email.com" style={{ ...s.input, flex: 1, minWidth: 200 }} />
               <button onClick={sendTest} disabled={busy} style={s.testBtn}>Send test to me</button>
             </div>
-            <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Goes only to this address — no members are emailed.</p>
+            <p style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>Goes only to this address — no members are emailed. Personalized fields fill in using that address's member record, so you can preview exactly what a member sees.</p>
           </div>
 
           <div style={{ display: 'flex', gap: 10, marginTop: 18, flexWrap: 'wrap', alignItems: 'center' }}>
@@ -204,6 +237,7 @@ const s: Record<string, React.CSSProperties> = {
   secondaryBtn: { display: 'flex', alignItems: 'center', gap: 6, padding: '11px 16px', background: '#e5e7eb', color: '#374151', border: 'none', borderRadius: 6, fontSize: 14, cursor: 'pointer' },
   message: { padding: '12px 14px', borderRadius: 8, marginBottom: 16, fontSize: 14 },
   note: { fontSize: 12, color: '#9ca3af', marginTop: 12 },
+  mergeChip: { padding: '6px 11px', borderRadius: 999, border: '1px solid #cfd8e3', background: '#eef3f8', color: '#2a5680', cursor: 'pointer', fontSize: 12.5, fontWeight: 600 },
   testBox: { marginTop: 20, padding: 16, background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: 10 },
   testBtn: { padding: '10px 16px', background: '#1f2937', color: 'white', border: 'none', borderRadius: 6, fontSize: 14, fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap' },
 }

@@ -1,15 +1,20 @@
 // ════════════════════════════════════════════════════════════════════
 // Shared email sending (Brevo) — used by /api/send-email (user-triggered)
-// and the cron routes (system-triggered digest + reminders). Server-only.
-// Requires SUPABASE_SERVICE_ROLE_KEY + BREVO_API_KEY.
+// and the cron routes. Server-only. Requires SUPABASE_SERVICE_ROLE_KEY +
+// BREVO_API_KEY. Provides a branded HTML template + per-recipient merge
+// fields ({{first_name}}, {{expired_date}}, {{renew_button}}, etc.).
 // ════════════════════════════════════════════════════════════════════
 import { createClient } from '@supabase/supabase-js'
 import { SUPABASE_URL } from '@/lib/supabaseConfig'
+import { signMember } from '@/lib/renewToken'
 
 const SERVICE = process.env.SUPABASE_SERVICE_ROLE_KEY
 const BREVO_API_KEY = process.env.BREVO_API_KEY
 const SENDER_EMAIL = process.env.BREVO_SENDER_EMAIL || 'info@footcandle.org'
 const SENDER_NAME = process.env.BREVO_SENDER_NAME || 'Footcandle Film Society'
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://members.footcandle.org'
+const BRAND = '#2a5680'
+const BRAND_DARK = '#1e3f5f'
 const BATCH = 500
 
 export function admin() {
@@ -20,29 +25,103 @@ export function admin() {
 export function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
 }
-
 function chunk<T>(arr: T[], n: number) {
   const out: T[][] = []
   for (let i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n))
   return out
 }
-
-export async function resolveRecipients(row: any): Promise<string[]> {
-  const explicit = (row.recipient_email || '')
-    .split(/[,;]/).map((s: string) => s.trim().toLowerCase()).filter((s: string) => s.includes('@'))
-  let list: string[] = explicit
-  if (!list.length) {
-    const f = row.recipient_filter || 'all_members'
-    let q = admin().from('members').select('email').not('email', 'is', null)
-    if (f === 'all_active') q = q.eq('status', 'active')
-    else if (f === 'all_expired') q = q.eq('status', 'expired')
-    const { data } = await q
-    list = (data || []).map((m: any) => (m.email || '').trim().toLowerCase()).filter((e: string) => e.includes('@'))
-  }
-  return Array.from(new Set(list))
+function fmtDate(s: string | null | undefined) {
+  if (!s) return ''
+  const d = new Date(String(s).slice(0, 10) + 'T00:00:00Z')
+  return isNaN(d.getTime()) ? '' : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 }
 
-// Insert a queued email and return its id.
+export type MemberCtx = {
+  id?: string; email: string; full_name?: string | null; first_name?: string | null
+  renewal_date?: string | null; expired_date?: string | null; autorenew?: boolean | null
+}
+
+// Branded, email-client-safe wrapper: logo header + content + footer.
+export function renderEmail(innerHtml: string): string {
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f6f9;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#f4f6f9;padding:24px 12px;">
+    <tr><td align="center">
+      <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#ffffff;border:1px solid #e6eaef;border-radius:12px;">
+        <tr><td align="center" style="padding:24px 28px;border-bottom:1px solid #eef1f5;">
+          <img src="${SITE_URL}/footcandle-logo.png" alt="Footcandle Film Society" width="240" style="display:block;width:240px;max-width:70%;height:auto;" />
+        </td></tr>
+        <tr><td style="padding:28px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#1f2937;">${innerHtml}</td></tr>
+        <tr><td align="center" style="background:${BRAND_DARK};padding:20px 28px;font-family:Arial,Helvetica,sans-serif;font-size:12px;line-height:1.5;color:#aebfd0;border-radius:0 0 12px 12px;">
+          Footcandle Film Society &middot; Catawba County, Western North Carolina<br/>
+          <a href="mailto:info@footcandle.org" style="color:#cfe0ef;">info@footcandle.org</a> &middot; You like movies. So do we.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body></html>`
+}
+
+function renewButton(url: string, label = 'Renew my membership') {
+  return `<table role="presentation" cellpadding="0" cellspacing="0" style="margin:24px 0;"><tr><td align="center" style="border-radius:8px;background:${BRAND};">` +
+    `<a href="${url}" style="display:inline-block;padding:14px 30px;font-family:Arial,Helvetica,sans-serif;font-size:16px;font-weight:bold;color:#ffffff;text-decoration:none;border-radius:8px;">${label}</a>` +
+    `</td></tr></table>`
+}
+
+// Substitute merge fields for one recipient and return HTML body content.
+export function personalizeBody(bodyText: string, ctx: MemberCtx): string {
+  const first = (ctx.first_name || (ctx.full_name ? ctx.full_name.split(/\s+/)[0] : '') || 'there')
+  const renewUrl = ctx.id ? `${SITE_URL}/renew?t=${signMember(ctx.id)}` : `${SITE_URL}/login`
+  const values: Record<string, string> = {
+    first_name: escapeHtml(first),
+    name: escapeHtml(ctx.full_name || ''),
+    email: escapeHtml(ctx.email || ''),
+    expired_date: fmtDate(ctx.expired_date || ctx.renewal_date),
+    renewal_date: fmtDate(ctx.renewal_date),
+    autorenew: ctx.autorenew ? 'Yes' : 'No',
+    renew_link: renewUrl,
+  }
+  let html = escapeHtml(bodyText)
+  html = html.replace(/\{\{(first_name|name|email|expired_date|renewal_date|autorenew|renew_link)\}\}/g, (_m, k) => values[k] ?? '')
+  html = html.replace(/\{\{renew_button\}\}/g, renewButton(renewUrl))
+  html = html.replace(/\n/g, '<br/>')
+  return html
+}
+
+// Resolve recipients WITH member context so merge fields can personalize.
+export async function resolveRecipients(row: any): Promise<MemberCtx[]> {
+  const cols = 'id,email,full_name,first_name,renewal_date,expired_date,autorenew,status'
+  let rows: any[] = []
+  const explicit = (row.recipient_email || '').split(/[,;]/).map((s: string) => s.trim().toLowerCase()).filter((s: string) => s.includes('@'))
+  if (explicit.length) {
+    const { data } = await admin().from('members').select(cols).in('email', explicit)
+    rows = data || []
+    const have = new Set(rows.map((m) => (m.email || '').toLowerCase()))
+    for (const e of explicit) if (!have.has(e)) rows.push({ email: e })
+  } else {
+    const f = row.recipient_filter || 'all_members'
+    let q = admin().from('members').select(cols).not('email', 'is', null)
+    if (f === 'all_active') q = q.eq('status', 'active')
+    else if (f === 'all_expired') q = q.eq('status', 'expired')
+    else if (f === 'expired_12mo') {
+      const cutoff = new Date(); cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 1)
+      q = q.eq('status', 'expired').gte('renewal_date', cutoff.toISOString().slice(0, 10))
+    }
+    const { data } = await q
+    rows = data || []
+  }
+  // De-dupe by email (households share one address) — keep the first.
+  const seen = new Set<string>()
+  const out: MemberCtx[] = []
+  for (const m of rows) {
+    const e = (m.email || '').trim().toLowerCase()
+    if (!e || !e.includes('@') || seen.has(e)) continue
+    seen.add(e)
+    out.push({ id: m.id, email: e, full_name: m.full_name, first_name: m.first_name, renewal_date: m.renewal_date, expired_date: m.expired_date, autorenew: m.autorenew })
+  }
+  return out
+}
+
 export async function queueEmail(fields: {
   email_type: string; subject: string; body: string; html_body?: string
   recipient_email?: string; recipient_filter?: string; metadata?: any
@@ -52,7 +131,8 @@ export async function queueEmail(fields: {
   return data.id as string
 }
 
-// Send an already-queued email via Brevo; marks it sent/failed. Returns count.
+// Send an already-queued email via Brevo, personalized per recipient. Marks
+// the row sent/failed. Returns the number of recipients sent to.
 export async function sendQueued(id: string): Promise<number> {
   if (!BREVO_API_KEY) throw new Error('Server is missing BREVO_API_KEY.')
   const { data: row, error } = await admin().from('email_queue').select('*').eq('id', id).single()
@@ -61,22 +141,23 @@ export async function sendQueued(id: string): Promise<number> {
 
   const recipients = await resolveRecipients(row)
   if (!recipients.length) throw new Error('No valid recipients for this email')
-
-  const htmlContent = row.html_body ||
-    `<div style="font-family:sans-serif;font-size:15px;line-height:1.6;color:#222">${escapeHtml(row.body || '').replace(/\n/g, '<br>')}</div>`
-  const textContent = row.body || ''
+  const bodyText = row.body || ''
 
   let sent = 0
   for (const group of chunk(recipients, BATCH)) {
+    const messageVersions = group.map((ctx) => ({
+      to: [{ email: ctx.email }],
+      htmlContent: renderEmail(personalizeBody(bodyText, ctx)),
+    }))
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
       headers: { 'api-key': BREVO_API_KEY, 'content-type': 'application/json', accept: 'application/json' },
       body: JSON.stringify({
         sender: { name: SENDER_NAME, email: SENDER_EMAIL },
         subject: row.subject,
-        htmlContent,
-        textContent,
-        messageVersions: group.map((email) => ({ to: [{ email }] })),
+        htmlContent: renderEmail(personalizeBody(bodyText, group[0])), // fallback default
+        textContent: bodyText,
+        messageVersions,
       }),
     })
     if (!res.ok) {

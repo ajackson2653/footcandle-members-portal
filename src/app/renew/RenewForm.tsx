@@ -23,7 +23,7 @@ function fmt(s: string | null) {
   return isNaN(d.getTime()) ? null : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 }
 
-export default function RenewForm({ email, canceled, member }: { email: string; canceled: boolean; member: Member | null }) {
+export default function RenewForm({ email, token, canceled, member }: { email: string; token?: string; canceled: boolean; member: Member | null }) {
   const [tier, setTier] = useState<Tier>('regular')
   const [mode, setMode] = useState<Mode>('subscription')
   const [loading, setLoading] = useState(false)
@@ -37,7 +37,7 @@ export default function RenewForm({ email, canceled, member }: { email: string; 
       const res = await fetch('/api/checkout', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess.session?.access_token || ''}` },
-        body: JSON.stringify({ tier, mode }),
+        body: JSON.stringify({ tier, mode, token }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.url) throw new Error(json.error || 'Could not start checkout')

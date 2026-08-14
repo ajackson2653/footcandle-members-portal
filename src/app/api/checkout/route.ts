@@ -8,6 +8,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getStripe, TIERS } from '@/lib/stripe'
 import { SUPABASE_URL, SUPABASE_ANON } from '@/lib/supabaseConfig'
+import { verifyToken } from '@/lib/renewToken'
+import { admin } from '@/lib/email'
 
 export const runtime = 'nodejs'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://members.footcandle.org'
@@ -22,20 +24,32 @@ async function requireUser(req: NextRequest) {
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY) return NextResponse.json({ error: 'Server is missing STRIPE_SECRET_KEY. Add the Stripe keys in Vercel, then redeploy.' }, { status: 500 })
 
-  const user = await requireUser(req)
-  if (!user?.email) return NextResponse.json({ error: 'Please sign in to renew.' }, { status: 401 })
-  const email = user.email.trim().toLowerCase()
+  const { tier, mode, token } = await req.json().catch(() => ({}))
 
-  const { tier, mode } = await req.json().catch(() => ({}))
+  // Identify the payer: a signed renewal-link token (no login) OR the session.
+  let email = ''
+  let memberId = ''
+  const idFromToken = verifyToken(token)
+  if (idFromToken) {
+    memberId = idFromToken
+    const { data } = await admin().from('members').select('email').eq('id', idFromToken).maybeSingle()
+    if (data?.email) email = data.email.trim().toLowerCase()
+  }
+  if (!email) {
+    const user = await requireUser(req)
+    if (user?.email) email = user.email.trim().toLowerCase()
+  }
+  if (!email) return NextResponse.json({ error: 'Please sign in to renew.' }, { status: 401 })
   const t = TIERS[tier as string]
   if (!t) return NextResponse.json({ error: 'Choose a membership type.' }, { status: 400 })
   if (mode !== 'subscription' && mode !== 'payment') return NextResponse.json({ error: 'Choose a payment option.' }, { status: 400 })
 
-  // Link the payment to the member record (by session email) so the webhook
-  // updates the right person.
-  let memberId = ''
-  const { data: m } = await createClient(SUPABASE_URL, SUPABASE_ANON).from('members').select('id').eq('email', email).order('renewal_date', { ascending: false }).limit(1).maybeSingle()
-  if (m?.id) memberId = m.id
+  // Link the payment to the member record so the webhook updates the right
+  // person. From a token we already have it; otherwise look up by email.
+  if (!memberId) {
+    const { data: m } = await createClient(SUPABASE_URL, SUPABASE_ANON).from('members').select('id').eq('email', email).order('renewal_date', { ascending: false }).limit(1).maybeSingle()
+    if (m?.id) memberId = m.id
+  }
 
   try {
     const price_data: any = { currency: 'usd', product_data: { name: `Footcandle Film Society — ${t.label}` }, unit_amount: t.amount }
