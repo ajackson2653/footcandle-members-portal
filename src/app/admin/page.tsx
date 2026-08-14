@@ -50,10 +50,10 @@ export default function AdminDashboard() {
             <p>View, edit, and renew member records</p>
           </Link>
 
-          <Link href="/admin/film-screenings" style={styles.card}>
+          <Link href="/admin/film-screenings/manage" style={styles.card}>
             <Film size={32} />
             <h2>Film Screenings</h2>
-            <p>Create monthly film announcements</p>
+            <p>Create, edit, or delete film screenings</p>
           </Link>
 
           <Link href="/admin/community-events" style={styles.card}>
