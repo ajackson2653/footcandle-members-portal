@@ -1,12 +1,11 @@
-// Public homepage for footcandle.org — a more-polished version of the current
-// WordPress site. Server component: reads published screenings + community
-// events from Supabase (graceful empty states when none / table absent).
+// Public homepage for footcandle.org — light, editorial, keyed to the brand
+// blue (#2a5680) and the real Footcandle logo. Server component: reads
+// published screenings + community events (graceful empty states).
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
-export const revalidate = 300 // refresh screening data every 5 min
+export const revalidate = 300
 
-// ── Links & constants (from the current footcandle.org) ────────────────
 const PODCAST_APPLE = 'https://podcasts.apple.com/us/podcast/footcandle-films/id1452574037'
 const PODCAST_EMBED = 'https://embed.podcasts.apple.com/us/podcast/footcandle-films/id1452574037'
 const FESTIVAL_URL = 'https://www.footcandlefilmfestival.com'
@@ -14,6 +13,13 @@ const GRANT_URL = 'https://www.footcandle.org/filmmaker-grant-program/'
 const FACEBOOK = 'https://www.facebook.com/footcandle'
 const YOUTUBE = 'https://www.youtube.com/channel/UCX4K0xedXNND7wJue-Xwu-g'
 const EMAIL = 'info@footcandle.org'
+
+// Brand palette derived from the logo
+const BRAND = '#2a5680'
+const BRAND_DARK = '#1e3f5f'
+const TINT = '#eef3f8'
+const INK = '#1f2937'
+const MUTED = '#5b6472'
 
 type DateRow = { screening_date: string; screening_time: string | null; venue: string | null; location_city: string | null; address: string | null }
 type Film = { id: string; title: string; description: string | null; poster_url: string | null; rating: string | null; running_time: string | null; screening_dates: DateRow[] | null }
@@ -25,9 +31,7 @@ function fmtLong(dateStr: string, timeStr?: string | null) {
   const day = d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' })
   if (!timeStr) return day
   const [h, m] = timeStr.split(':')
-  const hr = ((+h + 11) % 12) + 1
-  const ap = +h >= 12 ? 'PM' : 'AM'
-  return `${day} · ${hr}:${m} ${ap}`
+  return `${day} · ${((+h + 11) % 12) + 1}:${m} ${+h >= 12 ? 'PM' : 'AM'}`
 }
 
 async function getNextScreening(): Promise<{ film: Film; date: DateRow } | null> {
@@ -37,23 +41,14 @@ async function getNextScreening(): Promise<{ film: Film; date: DateRow } | null>
     .eq('published', true)
   if (error || !data) return null
   let best: { film: Film; date: DateRow } | null = null
-  for (const f of data as Film[]) {
-    for (const d of f.screening_dates || []) {
-      if (d.screening_date >= today() && (!best || d.screening_date < best.date.screening_date)) best = { film: f, date: d }
-    }
+  for (const f of data as Film[]) for (const d of f.screening_dates || []) {
+    if (d.screening_date >= today() && (!best || d.screening_date < best.date.screening_date)) best = { film: f, date: d }
   }
   return best
 }
-
 async function getCommunityEvents(): Promise<Community[]> {
-  const { data, error } = await supabase
-    .from('community_events')
-    .select('*')
-    .eq('published', true)
-    .gte('event_date', today())
-    .order('event_date', { ascending: true })
-    .limit(6)
-  if (error || !data) return [] // table may not exist yet
+  const { data, error } = await supabase.from('community_events').select('*').eq('published', true).gte('event_date', today()).order('event_date').limit(6)
+  if (error || !data) return []
   return data as Community[]
 }
 
@@ -61,66 +56,81 @@ export default async function Home() {
   const [next, community] = await Promise.all([getNextScreening(), getCommunityEvents()])
 
   return (
-    <div style={{ background: '#0a0a0f', color: '#f4f4f6', minHeight: '100vh' }}>
-      <Nav />
+    <div style={{ background: '#fff', color: INK, minHeight: '100vh' }}>
+      {/* Nav */}
+      <nav style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #e6eaef' }}>
+        <div style={{ ...wrap, paddingTop: 14, paddingBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <Link href="/"><img src="/footcandle-logo.png" alt="Footcandle Film Society" style={{ height: 38, width: 'auto', display: 'block' }} /></Link>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <a href="#screenings" style={navLink} className="nav-hide">Screenings</a>
+            <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Podcast</a>
+            <a href={FESTIVAL_URL} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Festival</a>
+            <Link href="/login" style={btnOutline}>Member Login</Link>
+            <Link href="/renew" style={btnPrimary}>Join / Renew</Link>
+          </div>
+        </div>
+      </nav>
 
-      {/* ── HERO: next Film Society screening ── */}
-      <section style={{ borderBottom: '1px solid #1e1e2b', background: 'radial-gradient(1200px 500px at 70% -10%, rgba(240,180,41,0.10), transparent), #0a0a0f' }}>
-        <div style={wrap}>
+      {/* Hero */}
+      <section style={{ background: `linear-gradient(180deg, ${TINT}, #fff)` }}>
+        <div style={{ ...wrap, paddingTop: 56, paddingBottom: 56 }}>
           <p style={kicker}>Next Film Society Screening</p>
           {next ? (
             <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 28, alignItems: 'center' }} className="hero-grid">
               <div>
-                <h1 style={{ fontSize: 'clamp(34px,6vw,60px)', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em' }}>{next.film.title}</h1>
-                <p style={{ marginTop: 14, fontSize: 20, color: '#f0b429', fontWeight: 600 }}>{fmtLong(next.date.screening_date, next.date.screening_time)}</p>
-                <p style={{ marginTop: 4, color: '#b8b8c6', fontSize: 16 }}>
-                  {[next.date.venue, next.date.location_city].filter(Boolean).join(' · ')}
-                  {next.date.address ? ` — ${next.date.address}` : ''}
-                </p>
-                {next.film.description && <p style={{ marginTop: 18, color: '#c9c9d4', maxWidth: 560, lineHeight: 1.6 }}>{next.film.description}</p>}
-                <div style={{ marginTop: 26, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <a href="#community" style={btnPrimary}>See all screenings</a>
-                  <Link href="/login" style={btnGhost}>Member Login</Link>
+                <h1 style={h1}>{next.film.title}</h1>
+                <p style={{ fontSize: 20, color: BRAND, fontWeight: 700, marginTop: 12 }}>{fmtLong(next.date.screening_date, next.date.screening_time)}</p>
+                <p style={{ marginTop: 4, color: MUTED, fontSize: 16 }}>{[next.date.venue, next.date.location_city].filter(Boolean).join(' · ')}{next.date.address ? ` — ${next.date.address}` : ''}</p>
+                {next.film.description && <p style={{ marginTop: 16, color: '#374151', maxWidth: 560, lineHeight: 1.65 }}>{next.film.description}</p>}
+                <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <a href="#screenings" style={btnPrimaryLg}>See all screenings</a>
+                  <Link href="/renew" style={btnOutlineLg}>Become a member</Link>
                 </div>
               </div>
-              {next.film.poster_url ? (
-                <img src={next.film.poster_url} alt={next.film.title} style={{ width: '100%', maxWidth: 340, borderRadius: 14, justifySelf: 'center', boxShadow: '0 20px 60px rgba(0,0,0,0.5)' }} />
-              ) : null}
+              {next.film.poster_url && <img src={next.film.poster_url} alt={next.film.title} style={{ width: '100%', maxWidth: 320, borderRadius: 12, justifySelf: 'center', boxShadow: '0 16px 44px rgba(30,63,95,0.25)' }} />}
             </div>
           ) : (
-            <div style={{ paddingBottom: 8 }}>
-              <h1 style={{ fontSize: 'clamp(32px,6vw,56px)', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em', maxWidth: 780 }}>
-                Our next screening will be announced soon.
-              </h1>
-              <p style={{ marginTop: 18, fontSize: 20, color: '#f0b429', fontWeight: 600 }}>You like movies. So do we.</p>
-              <p style={{ marginTop: 8, color: '#b8b8c6', maxWidth: 620, lineHeight: 1.6 }}>
-                Footcandle Film Society brings documentaries, foreign narratives, and award-nominated films — with moderated
-                discussion — to Catawba County and Western North Carolina.
+            <div>
+              <h1 style={{ ...h1, maxWidth: 780 }}>You like movies. So do we.</h1>
+              <p style={{ marginTop: 16, fontSize: 19, color: '#374151', maxWidth: 620, lineHeight: 1.65 }}>
+                Footcandle Film Society brings documentaries, foreign narratives, and award-nominated films — with real
+                conversation — to Catawba County and Western North Carolina. Our next screening will be announced soon.
               </p>
-              <div style={{ marginTop: 26, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={btnPrimary}>Listen to the podcast</a>
-                <Link href="/login" style={btnGhost}>Member Login</Link>
+              <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                <Link href="/renew" style={btnPrimaryLg}>Become a member</Link>
+                <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={btnOutlineLg}>Listen to the podcast</a>
               </div>
             </div>
           )}
         </div>
       </section>
 
-      {/* ── Community film events (secondary tier) ── */}
-      <section id="community" style={{ background: '#0c0c13' }}>
+      {/* Membership CTA band — payments front and center */}
+      <section style={{ background: BRAND }}>
+        <div style={{ ...wrap, paddingTop: 40, paddingBottom: 40, display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ maxWidth: 640 }}>
+            <h2 style={{ fontSize: 26, fontWeight: 800, color: '#fff' }}>Become a member — or renew online in a minute</h2>
+            <p style={{ marginTop: 8, color: '#cfe0ef', lineHeight: 1.6 }}>Regular $50/yr · Student $25/yr. Your membership keeps independent film alive in Western North Carolina.</p>
+          </div>
+          <Link href="/renew" style={{ ...btnPrimaryLg, background: '#fff', color: BRAND }}>Join / Renew now</Link>
+        </div>
+      </section>
+
+      {/* Community events */}
+      <section id="screenings" style={{ background: '#fff' }}>
         <div style={wrap}>
           <SectionHead title="Upcoming Community Film Events" sub="Screenings around the area we're proud to help promote — not hosted by the Film Society." />
           {community.length ? (
             <div style={grid3}>
               {community.map((e) => (
                 <div key={e.id} style={card}>
-                  {e.poster_url && <img src={e.poster_url} alt={e.title} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 10, marginBottom: 14 }} />}
-                  <h3 style={{ fontSize: 19, fontWeight: 700 }}>{e.title}</h3>
-                  <p style={{ marginTop: 6, color: '#f0b429', fontWeight: 600, fontSize: 14 }}>{fmtLong(e.event_date, e.event_time)}</p>
-                  <p style={{ marginTop: 2, color: '#a7a7b4', fontSize: 14 }}>{[e.venue, e.location_city].filter(Boolean).join(' · ')}</p>
+                  {e.poster_url && <img src={e.poster_url} alt={e.title} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 8, marginBottom: 12 }} />}
+                  <h3 style={{ fontSize: 18, fontWeight: 700 }}>{e.title}</h3>
+                  <p style={{ marginTop: 6, color: BRAND, fontWeight: 700, fontSize: 14 }}>{fmtLong(e.event_date, e.event_time)}</p>
+                  <p style={{ marginTop: 2, color: MUTED, fontSize: 14 }}>{[e.venue, e.location_city].filter(Boolean).join(' · ')}</p>
                   {e.host_org && <p style={{ marginTop: 8, color: '#8a8a98', fontSize: 13 }}>Presented by {e.host_org}</p>}
-                  {e.description && <p style={{ marginTop: 10, color: '#c2c2ce', fontSize: 14, lineHeight: 1.5 }}>{e.description}</p>}
-                  {e.link_url && <a href={e.link_url} target="_blank" rel="noopener noreferrer" style={{ ...linkText, display: 'inline-block', marginTop: 12 }}>More info →</a>}
+                  {e.description && <p style={{ marginTop: 10, color: '#4b5563', fontSize: 14, lineHeight: 1.5 }}>{e.description}</p>}
+                  {e.link_url && <a href={e.link_url} target="_blank" rel="noopener noreferrer" style={{ color: BRAND, fontWeight: 600, display: 'inline-block', marginTop: 12 }}>More info →</a>}
                 </div>
               ))}
             </div>
@@ -130,156 +140,114 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* ── Filmmaker Grant ── */}
-      <section style={{ background: 'linear-gradient(180deg,#141019,#0a0a0f)' }}>
-        <div style={wrap}>
-          <div style={{ ...card, borderColor: 'rgba(240,180,41,0.35)', background: 'linear-gradient(135deg, rgba(240,180,41,0.10), rgba(26,26,36,0.6))', display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ maxWidth: 620 }}>
-              <p style={{ ...kicker, marginTop: 0 }}>2026 Filmmaker Grant Fund</p>
-              <h2 style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>Making a film in North Carolina? We want to help fund it.</h2>
-              <p style={{ marginTop: 12, color: '#c9c9d4', lineHeight: 1.6 }}>
-                Our Filmmaker Grant Program provides financial support to projects with a majority of their production taking
-                place in North Carolina. Applications for 2026 are open.
-              </p>
-            </div>
-            <a href={GRANT_URL} target="_blank" rel="noopener noreferrer" style={btnPrimary}>Apply for the grant</a>
+      {/* Grant */}
+      <section style={{ background: TINT }}>
+        <div style={{ ...wrap, display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ maxWidth: 640 }}>
+            <p style={kicker}>2026 Filmmaker Grant Fund</p>
+            <h2 style={h2}>Making a film in North Carolina? We want to help fund it.</h2>
+            <p style={{ marginTop: 12, color: '#374151', lineHeight: 1.6 }}>Our Filmmaker Grant Program supports projects with a majority of their production in North Carolina. Applications for 2026 are open.</p>
           </div>
+          <a href={GRANT_URL} target="_blank" rel="noopener noreferrer" style={btnPrimaryLg}>Apply for the grant</a>
         </div>
       </section>
 
-      {/* ── Podcast ── */}
-      <section style={{ background: '#0c0c13' }}>
+      {/* Podcast */}
+      <section style={{ background: '#fff' }}>
         <div style={wrap}>
           <SectionHead title="Listen to the Footcandle Films Podcast" sub="Our conversations about the films we love — new episodes and the full back catalog." />
           <div style={{ display: 'grid', gap: 24, gridTemplateColumns: 'minmax(0,1fr)' }} className="podcast-grid">
-            <iframe
-              title="Footcandle Films Podcast"
-              allow="autoplay *; encrypted-media *;"
-              height={450}
-              style={{ width: '100%', maxWidth: 660, overflow: 'hidden', borderRadius: 12, border: 'none', background: 'transparent' }}
-              sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"
-              src={PODCAST_EMBED}
-            />
+            <iframe title="Footcandle Films Podcast" allow="autoplay *; encrypted-media *;" height={450} style={{ width: '100%', maxWidth: 660, overflow: 'hidden', borderRadius: 12, border: '1px solid #e6eaef' }} sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation" src={PODCAST_EMBED} />
             <div style={{ alignSelf: 'center' }}>
               <h3 style={{ fontSize: 22, fontWeight: 700 }}>Go deeper</h3>
-              <p style={{ marginTop: 10, color: '#c2c2ce', lineHeight: 1.6, maxWidth: 420 }}>
-                Press play on the latest episode, then browse the full archive of past conversations on Apple Podcasts.
-              </p>
-              <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={{ ...btnGhost, marginTop: 16, display: 'inline-block' }}>Browse all past episodes</a>
+              <p style={{ marginTop: 10, color: '#4b5563', lineHeight: 1.6, maxWidth: 420 }}>Press play on the latest episode, then browse the full archive of past conversations on Apple Podcasts.</p>
+              <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={{ ...btnOutlineLg, marginTop: 16, display: 'inline-block' }}>Browse all past episodes</a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ── Festival ── */}
-      <section style={{ background: 'linear-gradient(180deg,#0a0a0f,#12121a)' }}>
-        <div style={wrap}>
-          <div style={{ ...card, display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ maxWidth: 620 }}>
-              <p style={{ ...kicker, marginTop: 0 }}>Footcandle Film Festival · Sept 18–27, 2026</p>
-              <h2 style={{ fontSize: 28, fontWeight: 800, marginTop: 6 }}>A festival of unique, challenging, and entertaining films.</h2>
-              <p style={{ marginTop: 12, color: '#c9c9d4', lineHeight: 1.6 }}>
-                Every September in Western North Carolina — competitive screenings, a 60-hour filmmaking competition, and
-                industry symposiums.
-              </p>
-            </div>
-            <a href={FESTIVAL_URL} target="_blank" rel="noopener noreferrer" style={btnPrimary}>Visit the festival</a>
+      {/* Festival */}
+      <section style={{ background: TINT }}>
+        <div style={{ ...wrap, display: 'flex', flexWrap: 'wrap', gap: 24, alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ maxWidth: 640 }}>
+            <p style={kicker}>Footcandle Film Festival · Sept 18–27, 2026</p>
+            <h2 style={h2}>A festival of unique, challenging, and entertaining films.</h2>
+            <p style={{ marginTop: 12, color: '#374151', lineHeight: 1.6 }}>Every September in Western North Carolina — competitive screenings, a 60-hour filmmaking competition, and industry symposiums.</p>
           </div>
+          <a href={FESTIVAL_URL} target="_blank" rel="noopener noreferrer" style={btnPrimaryLg}>Visit the festival</a>
         </div>
       </section>
 
-      {/* ── About ── */}
-      <section style={{ background: '#0c0c13' }}>
+      {/* About */}
+      <section style={{ background: '#fff' }}>
         <div style={{ ...wrap, maxWidth: 820 }}>
           <SectionHead title="What is Footcandle?" />
-          <p style={{ color: '#c9c9d4', lineHeight: 1.7, fontSize: 17 }}>
+          <p style={{ color: '#374151', lineHeight: 1.75, fontSize: 17 }}>
             Footcandle Film Society is a member-supported nonprofit in Catawba County, Western North Carolina. We host monthly
-            screenings of documentaries, foreign narratives, and award-nominated movies — each followed by a moderated
-            discussion — along with the annual Footcandle Film Festival and a Children's International Film Festival.
-            You like movies. So do we.
+            screenings of documentaries, foreign narratives, and award-nominated movies — each followed by real conversation —
+            along with the annual Footcandle Film Festival and a Children's International Film Festival. You like movies. So do we.
           </p>
-          <Link href="/login" style={{ ...btnGhost, marginTop: 20, display: 'inline-block' }}>Member Login</Link>
+          <div style={{ marginTop: 20, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+            <Link href="/renew" style={btnPrimaryLg}>Become a member</Link>
+            <Link href="/login" style={btnOutlineLg}>Member Login</Link>
+          </div>
         </div>
       </section>
 
-      <Footer />
-    </div>
-  )
-}
-
-// ── Small building blocks ──────────────────────────────────────────────
-function Nav() {
-  const links = [
-    { href: '#community', label: 'Screenings' },
-    { href: '#community', label: 'Community' },
-    { href: '/login', label: 'Members' },
-  ]
-  return (
-    <nav style={{ position: 'sticky', top: 0, zIndex: 20, backdropFilter: 'blur(10px)', background: 'rgba(10,10,15,0.8)', borderBottom: '1px solid #1e1e2b' }}>
-      <div style={{ ...wrap, paddingTop: 16, paddingBottom: 16, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Link href="/" style={{ textDecoration: 'none', color: '#f4f4f6' }}>
-          <span style={{ fontWeight: 800, letterSpacing: '0.14em', fontSize: 15 }}>FOOTCANDLE</span>
-          <span style={{ color: '#f0b429', fontWeight: 800, letterSpacing: '0.14em', fontSize: 15 }}> FILM SOCIETY</span>
-        </Link>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 22 }}>
-          <a href={FESTIVAL_URL} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Festival</a>
-          <a href={GRANT_URL} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Grant</a>
-          <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Podcast</a>
-          <Link href="/login" style={{ ...btnPrimary, padding: '8px 16px', fontSize: 14 }}>Member Login</Link>
+      {/* Footer */}
+      <footer style={{ background: BRAND_DARK, color: '#dfe8f1' }}>
+        <div style={{ ...wrap, paddingTop: 44, paddingBottom: 28, display: 'flex', flexWrap: 'wrap', gap: 28, justifyContent: 'space-between' }}>
+          <div style={{ maxWidth: 320 }}>
+            <div style={{ fontWeight: 800, letterSpacing: '0.12em', fontSize: 15, color: '#fff' }}>FOOTCANDLE FILM SOCIETY</div>
+            <p style={{ marginTop: 10, fontSize: 14, lineHeight: 1.55, color: '#aebfd0' }}>Catawba County, Western North Carolina. You like movies. So do we.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 44, flexWrap: 'wrap' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={footHead}>Explore</span>
+              <a href={FESTIVAL_URL} target="_blank" rel="noopener noreferrer" style={footLink}>Film Festival</a>
+              <a href={GRANT_URL} target="_blank" rel="noopener noreferrer" style={footLink}>Filmmaker Grant</a>
+              <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={footLink}>Podcast</a>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={footHead}>Membership</span>
+              <Link href="/renew" style={footLink}>Join / Renew</Link>
+              <Link href="/login" style={footLink}>Member Login</Link>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <span style={footHead}>Connect</span>
+              <a href={FACEBOOK} target="_blank" rel="noopener noreferrer" style={footLink}>Facebook</a>
+              <a href={YOUTUBE} target="_blank" rel="noopener noreferrer" style={footLink}>YouTube</a>
+              <a href={`mailto:${EMAIL}`} style={footLink}>{EMAIL}</a>
+            </div>
+          </div>
         </div>
-      </div>
-    </nav>
+        <div style={{ ...wrap, paddingTop: 0, paddingBottom: 24, color: '#8ea3ba', fontSize: 13 }}>© {new Date().getFullYear()} Footcandle Film Society</div>
+      </footer>
+    </div>
   )
 }
 
 function SectionHead({ title, sub }: { title: string; sub?: string }) {
   return (
     <div style={{ marginBottom: 26 }}>
-      <h2 style={{ fontSize: 'clamp(24px,4vw,34px)', fontWeight: 800, letterSpacing: '-0.01em' }}>{title}</h2>
-      {sub && <p style={{ marginTop: 8, color: '#9a9aa8', maxWidth: 640, lineHeight: 1.5 }}>{sub}</p>}
+      <h2 style={h2}>{title}</h2>
+      {sub && <p style={{ marginTop: 8, color: MUTED, maxWidth: 640, lineHeight: 1.5 }}>{sub}</p>}
     </div>
   )
 }
 
-function Footer() {
-  const year = new Date().getFullYear()
-  return (
-    <footer style={{ background: '#08080c', borderTop: '1px solid #1e1e2b' }}>
-      <div style={{ ...wrap, display: 'flex', flexWrap: 'wrap', gap: 24, justifyContent: 'space-between' }}>
-        <div>
-          <div style={{ fontWeight: 800, letterSpacing: '0.14em', fontSize: 15 }}>FOOTCANDLE <span style={{ color: '#f0b429' }}>FILM SOCIETY</span></div>
-          <p style={{ marginTop: 10, color: '#8a8a98', fontSize: 14, maxWidth: 320, lineHeight: 1.5 }}>Catawba County, Western North Carolina. You like movies. So do we.</p>
-        </div>
-        <div style={{ display: 'flex', gap: 40, flexWrap: 'wrap' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={footHead}>Explore</span>
-            <a href={FESTIVAL_URL} target="_blank" rel="noopener noreferrer" style={footLink}>Film Festival</a>
-            <a href={GRANT_URL} target="_blank" rel="noopener noreferrer" style={footLink}>Filmmaker Grant</a>
-            <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={footLink}>Podcast</a>
-            <Link href="/login" style={footLink}>Member Login</Link>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <span style={footHead}>Connect</span>
-            <a href={FACEBOOK} target="_blank" rel="noopener noreferrer" style={footLink}>Facebook</a>
-            <a href={YOUTUBE} target="_blank" rel="noopener noreferrer" style={footLink}>YouTube</a>
-            <a href={`mailto:${EMAIL}`} style={footLink}>{EMAIL}</a>
-          </div>
-        </div>
-      </div>
-      <div style={{ ...wrap, paddingTop: 0, color: '#5f5f6b', fontSize: 13 }}>© {year} Footcandle Film Society</div>
-    </footer>
-  )
-}
-
-// ── Style tokens (inline for a self-contained server component) ─────────
-const wrap: React.CSSProperties = { maxWidth: 1080, margin: '0 auto', padding: '64px 24px' }
-const kicker: React.CSSProperties = { textTransform: 'uppercase', letterSpacing: '0.18em', fontSize: 13, fontWeight: 700, color: '#f0b429', marginBottom: 14 }
+const wrap: React.CSSProperties = { maxWidth: 1080, margin: '0 auto', padding: '60px 24px' }
+const h1: React.CSSProperties = { fontSize: 'clamp(34px,6vw,58px)', fontWeight: 800, lineHeight: 1.05, letterSpacing: '-0.02em', color: INK }
+const h2: React.CSSProperties = { fontSize: 'clamp(24px,4vw,32px)', fontWeight: 800, letterSpacing: '-0.01em', color: INK }
+const kicker: React.CSSProperties = { textTransform: 'uppercase', letterSpacing: '0.16em', fontSize: 13, fontWeight: 700, color: BRAND, marginBottom: 12 }
 const grid3: React.CSSProperties = { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 20 }
-const card: React.CSSProperties = { background: '#15151d', border: '1px solid #262633', borderRadius: 14, padding: 22 }
-const emptyBox: React.CSSProperties = { border: '1px dashed #2c2c3a', borderRadius: 12, padding: '32px 20px', color: '#8a8a98', textAlign: 'center' }
-const btnPrimary: React.CSSProperties = { background: '#f0b429', color: '#1a1200', fontWeight: 700, padding: '12px 22px', borderRadius: 8, textDecoration: 'none', display: 'inline-block' }
-const btnGhost: React.CSSProperties = { border: '1px solid #3a3a4a', color: '#f4f4f6', fontWeight: 600, padding: '11px 20px', borderRadius: 8, textDecoration: 'none' }
-const navLink: React.CSSProperties = { color: '#c2c2ce', textDecoration: 'none', fontSize: 15 }
-const linkText: React.CSSProperties = { color: '#f0b429', textDecoration: 'none', fontWeight: 600 }
-const footHead: React.CSSProperties = { color: '#f4f4f6', fontWeight: 700, fontSize: 14, marginBottom: 4 }
-const footLink: React.CSSProperties = { color: '#9a9aa8', textDecoration: 'none', fontSize: 14 }
+const card: React.CSSProperties = { background: '#fff', border: '1px solid #e6eaef', borderRadius: 12, padding: 20, boxShadow: '0 1px 3px rgba(30,63,95,0.06)' }
+const emptyBox: React.CSSProperties = { border: '1px dashed #cfd8e3', borderRadius: 12, padding: '32px 20px', color: MUTED, textAlign: 'center', background: '#fafbfc' }
+const navLink: React.CSSProperties = { color: '#374151', textDecoration: 'none', fontSize: 15, fontWeight: 500 }
+const btnPrimary: React.CSSProperties = { background: BRAND, color: '#fff', fontWeight: 700, padding: '9px 16px', borderRadius: 8, textDecoration: 'none', fontSize: 14 }
+const btnOutline: React.CSSProperties = { color: BRAND, fontWeight: 700, padding: '9px 14px', borderRadius: 8, textDecoration: 'none', fontSize: 14, border: `1.5px solid ${BRAND}` }
+const btnPrimaryLg: React.CSSProperties = { background: BRAND, color: '#fff', fontWeight: 700, padding: '13px 24px', borderRadius: 9, textDecoration: 'none', display: 'inline-block' }
+const btnOutlineLg: React.CSSProperties = { color: BRAND, fontWeight: 700, padding: '12px 22px', borderRadius: 9, textDecoration: 'none', border: `1.5px solid ${BRAND}`, display: 'inline-block' }
+const footHead: React.CSSProperties = { color: '#fff', fontWeight: 700, fontSize: 14, marginBottom: 4 }
+const footLink: React.CSSProperties = { color: '#aebfd0', textDecoration: 'none', fontSize: 14 }

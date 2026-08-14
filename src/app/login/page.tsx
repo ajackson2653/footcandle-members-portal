@@ -57,7 +57,7 @@ export default function LoginPage() {
   return (
     <div style={s.container}>
       <div style={s.card}>
-        <h1 style={s.title}>Footcandle Film Society</h1>
+        <img src="/footcandle-logo.png" alt="Footcandle Film Society" style={{ width: '85%', maxWidth: 280, height: 'auto', display: 'block', margin: '0 auto 6px' }} />
         <p style={s.subtitle}>Members</p>
 
         <form onSubmit={handlePassword}>
@@ -96,24 +96,24 @@ export default function LoginPage() {
 }
 
 const s: Record<string, React.CSSProperties> = {
-  container: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', padding: 20 },
+  container: { display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', background: 'linear-gradient(135deg, #2a5680 0%, #1e3f5f 100%)', padding: 20 },
   card: { background: 'white', borderRadius: 16, padding: 40, maxWidth: 460, width: '100%', boxShadow: '0 10px 40px rgba(0,0,0,0.2)', textAlign: 'center' },
   title: { fontSize: 28, fontWeight: 800, marginBottom: 2, color: '#1f2937' },
   subtitle: { fontSize: 16, color: '#6b7280', marginBottom: 24 },
   label: { display: 'block', fontSize: 15, fontWeight: 600, margin: '0 0 8px', color: '#1f2937', textAlign: 'left' },
   input: { width: '100%', padding: '15px', border: '2px solid #d1d5db', borderRadius: 10, fontSize: 17, fontFamily: 'inherit', marginBottom: 18 },
-  button: { width: '100%', padding: '15px', background: '#2563eb', color: 'white', border: 'none', borderRadius: 10, fontSize: 17, fontWeight: 700, cursor: 'pointer' },
+  button: { width: '100%', padding: '15px', background: '#2a5680', color: 'white', border: 'none', borderRadius: 10, fontSize: 17, fontWeight: 700, cursor: 'pointer' },
   toggle: { fontSize: 15, color: '#4b5563', marginTop: 18 },
-  toggleBtn: { background: 'none', border: 'none', color: '#2563eb', fontWeight: 700, cursor: 'pointer', fontSize: 15, textDecoration: 'underline' },
+  toggleBtn: { background: 'none', border: 'none', color: '#2a5680', fontWeight: 700, cursor: 'pointer', fontSize: 15, textDecoration: 'underline' },
   divider: { display: 'flex', alignItems: 'center', margin: '22px 0 18px', color: '#9ca3af' },
   dividerLine: { flex: 1, height: 1, background: '#e5e7eb' },
   dividerText: { flex: 'none', padding: '0 12px', fontSize: 14 },
-  linkButton: { width: '100%', padding: '14px', background: 'white', color: '#2563eb', border: '2px solid #2563eb', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' },
-  linkText: { background: 'none', border: 'none', color: '#2563eb', fontSize: 16, fontWeight: 600, cursor: 'pointer', marginTop: 12, textDecoration: 'underline' },
+  linkButton: { width: '100%', padding: '14px', background: 'white', color: '#2a5680', border: '2px solid #2a5680', borderRadius: 10, fontSize: 16, fontWeight: 700, cursor: 'pointer' },
+  linkText: { background: 'none', border: 'none', color: '#2a5680', fontSize: 16, fontWeight: 600, cursor: 'pointer', marginTop: 12, textDecoration: 'underline' },
   error: { color: '#dc2626', fontSize: 15, marginBottom: 14, padding: 12, background: '#fee2e2', borderRadius: 8, textAlign: 'left', lineHeight: 1.5 },
   notice: { color: '#065f46', fontSize: 15, marginBottom: 14, padding: 12, background: '#d1fae5', borderRadius: 8, textAlign: 'left', lineHeight: 1.5 },
   help: { fontSize: 14, color: '#6b7280', marginTop: 22, lineHeight: 1.5 },
-  helpLink: { color: '#2563eb', fontWeight: 600 },
+  helpLink: { color: '#2a5680', fontWeight: 600 },
   sentTitle: { fontSize: 24, fontWeight: 800, color: '#1f2937', margin: '8px 0 14px' },
   sentText: { fontSize: 17, color: '#374151', lineHeight: 1.6, marginBottom: 14 },
 }

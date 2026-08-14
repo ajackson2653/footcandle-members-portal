@@ -169,9 +169,9 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-brand-tint to-white flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-purple-600 mx-auto mb-4"></div>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-brand mx-auto mb-4"></div>
           <p className="text-gray-600">Loading your dashboard...</p>
         </div>
       </div>
@@ -180,13 +180,13 @@ export default function Dashboard() {
 
   if (error || !member) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-brand-tint to-white flex items-center justify-center">
         <div className="bg-white rounded-lg shadow-lg p-8 max-w-md">
           <h1 className="text-2xl font-bold text-red-600 mb-4">Error</h1>
           <p className="text-gray-600 mb-6">{error || 'Failed to load member data'}</p>
           <button
             onClick={handleLogout}
-            className="w-full bg-purple-600 text-white px-4 py-2 rounded-lg hover:bg-purple-700 transition"
+            className="w-full bg-brand text-white px-4 py-2 rounded-lg hover:bg-brand-dark transition"
           >
             Return to Login
           </button>
@@ -203,13 +203,13 @@ export default function Dashboard() {
   const isExpired = daysUntilRenewal < 0
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-purple-50 to-blue-50">
+    <div className="min-h-screen bg-gradient-to-br from-brand-tint to-white">
       {/* Header */}
-      <div className="bg-gradient-to-r from-purple-600 to-blue-600 text-white py-8">
+      <div className="bg-gradient-to-r from-brand to-brand-dark text-white py-8">
         <div className="max-w-6xl mx-auto px-4 flex justify-between items-center">
           <div>
             <h1 className="text-4xl font-bold mb-2">Welcome, {member.full_name}!</h1>
-            <p className="text-purple-100">Footcandle Film Society</p>
+            <p className="text-blue-100">Footcandle Film Society</p>
           </div>
           <button
             onClick={handleLogout}
@@ -231,7 +231,7 @@ export default function Dashboard() {
             </div>
             <button
               onClick={handleRenewal}
-              className="bg-purple-600 text-white text-lg font-bold px-8 py-4 rounded-xl hover:bg-purple-700 transition whitespace-nowrap"
+              className="bg-brand text-white text-lg font-bold px-8 py-4 rounded-xl hover:bg-brand-dark transition whitespace-nowrap"
             >
               Renew Your Membership →
             </button>
@@ -285,7 +285,7 @@ export default function Dashboard() {
             {isExpired && (
               <button
                 onClick={handleRenewal}
-                className="mt-3 w-full bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700 transition text-sm font-medium"
+                className="mt-3 w-full bg-brand text-white px-4 py-2 rounded hover:bg-brand-dark transition text-sm font-medium"
               >
                 Renew Now
               </button>
@@ -295,10 +295,10 @@ export default function Dashboard() {
           {/* Attendance Count */}
           <div className="bg-white rounded-lg shadow p-6">
             <div className="flex items-center gap-3 mb-4">
-              <Film className="text-purple-600" size={24} />
+              <Film className="text-brand" size={24} />
               <h2 className="text-lg font-semibold">Screenings Attended</h2>
             </div>
-            <p className="text-4xl font-bold text-purple-600">{checkIns.length}</p>
+            <p className="text-4xl font-bold text-brand">{checkIns.length}</p>
             <p className="text-sm text-gray-600 mt-2">films you've attended with us</p>
           </div>
         </div>
@@ -377,7 +377,7 @@ export default function Dashboard() {
               {announcements.map((ann) => (
                 <div
                   key={ann.id}
-                  className="bg-white rounded-lg shadow p-6 border-l-4 border-purple-600"
+                  className="bg-white rounded-lg shadow p-6 border-l-4 border-brand"
                 >
                   <p className="text-gray-800 whitespace-pre-wrap">{ann.body}</p>
                   <p className="text-sm text-gray-500 mt-3">
