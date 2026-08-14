@@ -48,7 +48,8 @@ async function activate(meta: any, customer: string | null, subscription: string
     }).eq('id', member.id)
   } else if (mail) {
     await db.from('members').insert({
-      full_name: mail.split('@')[0], email: mail, status: 'active', renewal_date: renewal,
+      full_name: (meta?.name && String(meta.name).trim()) || mail.split('@')[0],
+      email: mail, status: 'active', renewal_date: renewal,
       autorenew: isSub, membership_type: tierType, stripe_customer_id: customer, stripe_subscription_id: subscription,
     })
   }

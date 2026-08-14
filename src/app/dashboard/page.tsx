@@ -3,7 +3,13 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { Heart, LogOut, Bell, Clock, Film } from 'lucide-react'
+import { Heart, LogOut, Bell, Film } from 'lucide-react'
+
+function fmtTime(t?: string | null) {
+  if (!t) return ''
+  const [h, m] = t.split(':')
+  return `${((+h + 11) % 12) + 1}:${m} ${+h >= 12 ? 'PM' : 'AM'}`
+}
 
 interface Member {
   id: string
@@ -202,6 +208,19 @@ export default function Dashboard() {
   )
   const isExpired = daysUntilRenewal < 0
 
+  // Show films that still have an upcoming date; each rolls off once its last
+  // screening passes. Sort films by their soonest upcoming date.
+  const todayStr = new Date().toISOString().slice(0, 10)
+  const upcomingFilms = filmScreenings
+    .map((f) => ({
+      film: f,
+      dates: (f.screening_dates || [])
+        .filter((d) => d.screening_date >= todayStr)
+        .sort((a, b) => (a.screening_date + (a.screening_time || '')).localeCompare(b.screening_date + (b.screening_time || ''))),
+    }))
+    .filter((x) => x.dates.length > 0)
+    .sort((a, b) => a.dates[0].screening_date.localeCompare(b.dates[0].screening_date))
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-brand-tint to-white">
       {/* Header */}
@@ -211,21 +230,13 @@ export default function Dashboard() {
             <h1 className="text-4xl font-bold mb-2">Welcome, {member.full_name}!</h1>
             <p className="text-blue-100">Footcandle Film Society</p>
           </div>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={handleRenewal}
-              className="bg-white text-brand font-bold px-6 py-2 rounded-lg hover:bg-blue-50 transition"
-            >
-              Renew Membership
-            </button>
-            <button
-              onClick={handleLogout}
-              className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-6 py-2 rounded-lg transition flex items-center gap-2"
-            >
-              <LogOut size={20} />
-              Log Out
-            </button>
-          </div>
+          <button
+            onClick={handleLogout}
+            className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-6 py-2 rounded-lg transition flex items-center gap-2"
+          >
+            <LogOut size={20} />
+            Log Out
+          </button>
         </div>
       </div>
 
@@ -247,125 +258,85 @@ export default function Dashboard() {
         )}
 
         {/* Status Cards */}
-        <div className="grid md:grid-cols-3 gap-4 mb-8">
+        <div className="grid md:grid-cols-2 gap-4 mb-8">
           {/* Membership Status */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center gap-3 mb-4">
+          <div className="bg-white rounded-lg shadow p-6 text-center">
+            <div className="flex items-center justify-center gap-3 mb-4">
               <Heart className="text-pink-600" size={24} />
               <h2 className="text-lg font-semibold">Membership Status</h2>
             </div>
-            <div className="flex items-center gap-3">
-              <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
-                  isExpired
-                    ? 'bg-red-100 text-red-800'
-                    : 'bg-green-100 text-green-800'
-                }`}
-              >
-                {isExpired ? 'Expired' : 'Active'}
-              </span>
-              <span className="text-gray-600 text-sm">{member.membership_type}</span>
-            </div>
-            {member.autorenew && (
-              <p className="text-sm text-gray-600 mt-3">Renews automatically each year</p>
-            )}
-            {household.length > 1 && (
-              <p className="text-sm text-gray-600 mt-3">
-                Covers: {household.map((m) => m.full_name).join(', ')}
-              </p>
-            )}
-          </div>
-
-          {/* Renewal Date */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Clock className="text-blue-600" size={24} />
-              <h2 className="text-lg font-semibold">Renewal Date</h2>
-            </div>
-            <p className="text-2xl font-bold text-blue-600 mb-2">
-              {renewalDate.toLocaleDateString()}
+            <span
+              className={`inline-block px-4 py-1.5 rounded-full text-sm font-semibold ${
+                isExpired ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'
+              }`}
+            >
+              {isExpired ? 'Expired' : 'Active'}
+            </span>
+            <p className="text-gray-700 mt-3">
+              {isExpired ? 'Expired ' : 'Renews '}
+              {renewalDate.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
             </p>
             {!isExpired && daysUntilRenewal <= 30 && (
-              <p className="text-sm text-orange-600 font-medium">
-                Renews in {daysUntilRenewal} days
-              </p>
+              <p className="text-sm text-orange-600 font-medium mt-1">Renews in {daysUntilRenewal} days</p>
             )}
-            {isExpired && (
-              <button
-                onClick={handleRenewal}
-                className="mt-3 w-full bg-brand text-white px-4 py-2 rounded hover:bg-brand-dark transition text-sm font-medium"
-              >
-                Renew Now
-              </button>
+            {member.autorenew && (
+              <p className="text-sm text-gray-600 mt-2">Renews automatically each year</p>
+            )}
+            {household.length > 1 && (
+              <p className="text-sm text-gray-600 mt-2">Covers: {household.map((m) => m.full_name).join(', ')}</p>
             )}
           </div>
 
-          {/* Attendance Count */}
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex items-center gap-3 mb-4">
-              <Film className="text-brand" size={24} />
-              <h2 className="text-lg font-semibold">Screenings Attended</h2>
-            </div>
-            <p className="text-4xl font-bold text-brand">{checkIns.length}</p>
-            <p className="text-sm text-gray-600 mt-2">films you've attended with us</p>
+          {/* Renew Membership */}
+          <div className="bg-white rounded-lg shadow p-6 flex flex-col items-center justify-center text-center">
+            <h2 className="text-lg font-semibold mb-4">Renew Membership</h2>
+            <button
+              onClick={handleRenewal}
+              className="bg-brand text-white text-lg font-bold px-8 py-4 rounded-xl hover:bg-brand-dark transition"
+            >
+              Renew Now →
+            </button>
           </div>
         </div>
 
-        {/* Film Screenings Section */}
-        {filmScreenings.length > 0 && (
+        {/* Film Screenings Section — poster left, dates right; chronological */}
+        {upcomingFilms.length > 0 && (
           <div className="mb-8">
             <h2 className="text-2xl font-bold text-gray-900 mb-4 flex items-center gap-2">
               <Film size={28} />
               Upcoming Film Screenings
             </h2>
-            <div className="grid md:grid-cols-2 gap-6">
-              {filmScreenings.map((film) => (
-                <div
-                  key={film.id}
-                  className="bg-white rounded-lg shadow overflow-hidden hover:shadow-lg transition"
-                >
+            <div className="space-y-6">
+              {upcomingFilms.map(({ film, dates }) => (
+                <div key={film.id} className="bg-white rounded-lg shadow p-5 flex gap-5">
                   {film.poster_url && (
-                    <div className="h-64 bg-gray-200 overflow-hidden">
-                      <img
-                        src={film.poster_url}
-                        alt={film.title}
-                        className="w-full h-full object-cover"
-                      />
-                    </div>
+                    <img
+                      src={film.poster_url}
+                      alt={film.title}
+                      className="w-28 md:w-40 h-auto rounded object-contain flex-none self-start"
+                    />
                   )}
-                  <div className="p-6">
-                    <h3 className="text-xl font-bold text-gray-900 mb-2">{film.title}</h3>
-                    {film.rating && (
-                      <p className="text-sm text-gray-600 mb-2">Rating: {film.rating}</p>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="text-xl font-bold text-gray-900">{film.title}</h3>
+                    {(film.rating || film.running_time) && (
+                      <p className="text-sm text-gray-600 mt-1 mb-3">
+                        {[film.rating, film.running_time].filter(Boolean).join(' · ')}
+                      </p>
                     )}
-                    {film.running_time && (
-                      <p className="text-sm text-gray-600 mb-3">Runtime: {film.running_time}</p>
-                    )}
-                    <p className="text-gray-700 text-sm mb-4">{film.description}</p>
-
-                    {/* Screening Dates */}
-                    <div className="border-t pt-4">
-                      <h4 className="font-semibold text-gray-900 mb-3">Screening Dates & Times</h4>
-                      <div className="space-y-2">
-                        {film.screening_dates?.map((date) => (
-                          <div key={date.id} className="bg-gray-50 p-3 rounded text-sm">
-                            <p className="font-medium text-gray-900">
-                              {new Date(date.screening_date).toLocaleDateString('en-US', {
-                                weekday: 'short',
-                                month: 'short',
-                                day: 'numeric',
-                              })}{' '}
-                              at {date.screening_time}
-                            </p>
-                            <p className="text-gray-600">
-                              {date.venue} • {date.location_city}
-                            </p>
-                            {date.address && (
-                              <p className="text-gray-500 text-xs">{date.address}</p>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                    <h4 className="font-semibold text-gray-900 mb-2">Screening Dates &amp; Times</h4>
+                    <div className="space-y-2">
+                      {dates.map((date) => (
+                        <div key={date.id} className="bg-gray-50 p-3 rounded text-sm">
+                          <p className="font-medium text-gray-900">
+                            {new Date(date.screening_date + 'T00:00:00Z').toLocaleDateString('en-US', {
+                              weekday: 'short', month: 'short', day: 'numeric', timeZone: 'UTC',
+                            })}
+                            {date.screening_time ? ` at ${fmtTime(date.screening_time)}` : ''}
+                          </p>
+                          <p className="text-gray-600">{[date.venue, date.location_city].filter(Boolean).join(' • ')}</p>
+                          {date.address && <p className="text-gray-500 text-xs">{date.address}</p>}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 </div>
