@@ -108,7 +108,7 @@ export default function RenewForm({ email, token, canceled, member }: { email: s
           {loading ? 'Redirecting to secure checkout…' : 'Continue to secure checkout'}
         </button>
         <p style={{ fontSize: 12, color: MUTED, marginTop: 14, textAlign: 'center' }}>Payments are processed securely by Stripe. Footcandle never sees your card details.</p>
-        <p style={{ marginTop: 18, textAlign: 'center' }}><Link href="/dashboard" style={{ color: BRAND, fontWeight: 600, textDecoration: 'none' }}>← Back to my dashboard</Link></p>
+        <p style={{ marginTop: 18, textAlign: 'center' }}><Link href={token ? '/' : '/dashboard'} style={{ color: BRAND, fontWeight: 600, textDecoration: 'none' }}>{token ? '← Back to Footcandle' : '← Back to my dashboard'}</Link></p>
       </div>
     </div>
   )
