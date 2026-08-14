@@ -87,8 +87,6 @@ export default function RenewForm({ email, token, canceled, member }: { email: s
             </button>
           ))}
         </div>
-        <p style={{ fontSize: 12.5, color: MUTED, marginTop: 10 }}>Founders memberships are complimentary — no payment needed. Contact info@footcandle.org.</p>
-
         <h2 style={label}>Billing</h2>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           <button onClick={() => setMode('subscription')} style={{ ...modeCard, ...(mode === 'subscription' ? active : {}) }}>
