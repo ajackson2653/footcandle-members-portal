@@ -5,6 +5,6 @@ export const MEMBERSHIP_BENEFITS = [
   'A moderated discussion after every film',
   'Members can attend the annual Academy Award Oscar-Viewing Party for free',
   'Invitations to special members events throughout the year',
-  'Support for our Filmmaker Grant and the Children’s International Film Festival',
+  'Support for our Filmmaker Grant Program and the Footcandle Film Festival',
   'A seat in Western North Carolina’s community of film lovers',
 ]
