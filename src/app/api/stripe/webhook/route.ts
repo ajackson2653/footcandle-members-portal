@@ -1,8 +1,9 @@
 // ════════════════════════════════════════════════════════════════════
 // Stripe webhook — the source of truth that a payment actually happened.
-// On checkout completion (and yearly subscription renewals) it: updates the
-// member's renewal_date/status/autorenew, stores Stripe ids, and sends the
-// renewal confirmation email. Requires STRIPE_WEBHOOK_SECRET.
+// Activates the member(s) covered by the payment (one, or a couple paid
+// together), stores Stripe ids + a shared household_id, and sends each a
+// branded renewal confirmation. Idempotent via the stripe_events table.
+// Requires STRIPE_WEBHOOK_SECRET.
 // ════════════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from 'next/server'
 import { getStripe } from '@/lib/stripe'
@@ -10,6 +11,8 @@ import { admin, queueEmail, sendQueued } from '@/lib/email'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://members.footcandle.org'
 
 function plusYear(current: string | null) {
   const today = new Date().toISOString().slice(0, 10)
@@ -22,43 +25,36 @@ function pretty(dateStr: string) {
   return new Date(dateStr + 'T00:00:00Z').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 }
 
-async function activate(meta: any, customer: string | null, subscription: string | null, email: string | null) {
-  const db = admin()
-  const isSub = !!subscription
-  const mail = (email || meta?.email || '').trim().toLowerCase()
+type Person = { id?: string; email?: string; name?: string; tier?: string }
 
+async function activateOne(p: Person, householdId: string | null, isSub: boolean, customer: string | null, subscription: string | null) {
+  const db = admin()
+  const mail = (p.email || '').trim().toLowerCase()
   let member: any = null
-  if (meta?.member_id) {
-    const { data } = await db.from('members').select('*').eq('id', meta.member_id).maybeSingle()
-    member = data
-  }
-  if (!member && mail) {
-    const { data } = await db.from('members').select('*').eq('email', mail).maybeSingle()
-    member = data
-  }
+  if (p.id) { const { data } = await db.from('members').select('*').eq('id', p.id).maybeSingle(); member = data }
+  if (!member && mail) { const { data } = await db.from('members').select('*').eq('email', mail).maybeSingle(); member = data }
 
   const renewal = plusYear(member?.renewal_date || null)
-  const tierType = meta?.tier === 'student' ? 'Student' : 'Regular'
+  const tierType = p.tier === 'student' ? 'Student' : 'Regular'
 
   if (member) {
     await db.from('members').update({
       status: 'active', renewal_date: renewal, expired_date: null, autorenew: isSub,
       stripe_customer_id: customer || member.stripe_customer_id, stripe_subscription_id: subscription || member.stripe_subscription_id,
-      updated_at: new Date().toISOString(),
+      household_id: householdId || member.household_id || null, updated_at: new Date().toISOString(),
     }).eq('id', member.id)
   } else if (mail) {
     await db.from('members').insert({
-      full_name: (meta?.name && String(meta.name).trim()) || mail.split('@')[0],
-      email: mail, status: 'active', renewal_date: renewal,
-      autorenew: isSub, membership_type: tierType, stripe_customer_id: customer, stripe_subscription_id: subscription,
+      full_name: (p.name && p.name.trim()) || mail.split('@')[0], email: mail, status: 'active',
+      renewal_date: renewal, autorenew: isSub, membership_type: tierType,
+      stripe_customer_id: customer, stripe_subscription_id: subscription, household_id: householdId,
     })
   }
 
   if (mail) {
-    const displayName = (member?.full_name && String(member.full_name).trim()) || (meta?.name && String(meta.name).trim()) || mail.split('@')[0]
-    const portal = process.env.NEXT_PUBLIC_SITE_URL || 'https://members.footcandle.org'
+    const displayName = (member?.full_name && String(member.full_name).trim()) || (p.name && p.name.trim()) || mail.split('@')[0]
     const plan = isSub
-      ? `You opted to have this membership auto-renew each year. This will continue until you decide to end your membership; you can do this at any time by visiting our Member Portal at ${portal}.`
+      ? `You opted to have this membership auto-renew each year. This will continue until you decide to end your membership; you can do this at any time by visiting our Member Portal at ${SITE_URL}.`
       : `This is a one-year membership. You will be notified when it is time to renew if you wish to continue your membership past this year.`
     const body =
       `Thank you — your Footcandle Film Society membership for ${displayName} at the email address ${mail} is confirmed and active through ${pretty(renewal)}.\n\n` +
@@ -69,6 +65,15 @@ async function activate(meta: any, customer: string | null, subscription: string
       const id = await queueEmail({ email_type: 'renewal_confirmation', recipient_email: mail, subject: 'Your Footcandle Film Society membership is confirmed', body, metadata: { auto: true } })
       await sendQueued(id)
     } catch { /* confirmation email is best-effort; payment already recorded */ }
+  }
+}
+
+// Activate everyone a payment covers (person1, and person2 if it's a couple).
+async function activateFromMeta(meta: any, isSub: boolean, customer: string | null, subscription: string | null, fallbackEmail?: string | null) {
+  const hh = meta?.household_id || null
+  await activateOne({ id: meta?.member_id, email: meta?.email || fallbackEmail, name: meta?.name, tier: meta?.tier }, hh, isSub, customer, subscription)
+  if (meta?.member2_email || meta?.member2_id) {
+    await activateOne({ id: meta?.member2_id, email: meta?.member2_email, name: meta?.member2_name, tier: meta?.member2_tier }, hh, isSub, customer, subscription)
   }
 }
 
@@ -85,11 +90,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Invalid signature: ${e instanceof Error ? e.message : 'bad'}` }, { status: 400 })
   }
 
-  // Idempotency: apply each Stripe event only once. Stripe retries and can
-  // deliver duplicates — without this, a renewal could stack extra years.
-  // Claiming the event id first is atomic; a duplicate insert (23505) means
-  // we've already handled it. (If the stripe_events table doesn't exist yet,
-  // we don't block — we just skip the guard.)
+  // Idempotency: apply each Stripe event only once.
   const { error: claimErr } = await admin().from('stripe_events').insert({ event_id: event.id })
   if (claimErr && (claimErr as any).code === '23505') {
     return NextResponse.json({ received: true, duplicate: true })
@@ -98,24 +99,23 @@ export async function POST(req: NextRequest) {
   try {
     if (event.type === 'checkout.session.completed') {
       const s = event.data.object
-      await activate(s.metadata, s.customer, s.subscription, s.customer_details?.email || s.customer_email || s.metadata?.email)
+      await activateFromMeta(s.metadata, !!s.subscription, s.customer, s.subscription, s.customer_details?.email || s.customer_email)
     } else if (event.type === 'invoice.paid') {
       const inv = event.data.object
       if (inv.billing_reason === 'subscription_cycle' && inv.subscription) {
         const sub = await getStripe().subscriptions.retrieve(inv.subscription)
-        await activate(sub.metadata, inv.customer, inv.subscription, inv.customer_email)
+        await activateFromMeta(sub.metadata, true, inv.customer, inv.subscription, inv.customer_email)
       }
     } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
-      // Keep member.autorenew in sync when they cancel (or re-enable) in the
-      // Stripe billing portal. cancel_at_period_end / deleted => no auto-renew.
+      // Keep autorenew in sync when someone cancels/re-enables in the billing portal.
       const sub: any = event.data.object
-      const memberId = sub.metadata?.member_id
       const stillRenewing = event.type !== 'customer.subscription.deleted' && sub.status !== 'canceled' && !sub.cancel_at_period_end
-      if (memberId) await admin().from('members').update({ autorenew: !!stillRenewing }).eq('id', memberId)
+      for (const memberId of [sub.metadata?.member_id, sub.metadata?.member2_id]) {
+        if (memberId) await admin().from('members').update({ autorenew: !!stillRenewing }).eq('id', memberId)
+      }
     }
     return NextResponse.json({ received: true })
   } catch (e) {
-    // Genuine handler failure: release the claim so Stripe's retry can reprocess.
     try { await admin().from('stripe_events').delete().eq('event_id', event.id) } catch { /* ignore */ }
     return NextResponse.json({ error: e instanceof Error ? e.message : 'handler error' }, { status: 500 })
   }

@@ -1,33 +1,57 @@
 // ════════════════════════════════════════════════════════════════════
-// Public checkout for NEW members (the /newmember page we direct interested
-// people to). No login — collects name + email, then Stripe Checkout. The
-// webhook creates the member record on payment. Requires STRIPE_SECRET_KEY.
+// Public checkout for NEW members (/newmember). No login. Collects name +
+// email, optionally a SECOND person, then Stripe Checkout. The webhook
+// creates the member record(s) on payment. Requires STRIPE_SECRET_KEY.
 // ════════════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { getStripe, TIERS } from '@/lib/stripe'
+import { SUPABASE_URL, SUPABASE_ANON } from '@/lib/supabaseConfig'
 
 export const runtime = 'nodejs'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://members.footcandle.org'
 
+function lineItem(tierKey: string, mode: string) {
+  const t = TIERS[tierKey]
+  const price_data: any = { currency: 'usd', product_data: { name: `Footcandle Film Society — ${t.label}` }, unit_amount: t.amount }
+  if (mode === 'subscription') price_data.recurring = { interval: 'year' }
+  return { price_data, quantity: 1 }
+}
+async function memberIdForEmail(email: string) {
+  const { data } = await createClient(SUPABASE_URL, SUPABASE_ANON).from('members').select('id').eq('email', email).limit(1).maybeSingle()
+  return data?.id || ''
+}
+
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY) return NextResponse.json({ error: 'Payments are not configured yet.' }, { status: 500 })
 
-  const { name, email, tier, mode } = await req.json().catch(() => ({}))
+  const { name, email, tier, mode, second } = await req.json().catch(() => ({}))
   const cleanName = String(name || '').trim()
   const cleanEmail = String(email || '').trim().toLowerCase()
-  const t = TIERS[tier as string]
   if (!cleanName || !cleanEmail.includes('@')) return NextResponse.json({ error: 'Please enter your name and a valid email.' }, { status: 400 })
-  if (!t) return NextResponse.json({ error: 'Choose a membership type.' }, { status: 400 })
+  if (!TIERS[tier as string]) return NextResponse.json({ error: 'Choose a membership type.' }, { status: 400 })
   if (mode !== 'subscription' && mode !== 'payment') return NextResponse.json({ error: 'Choose a payment option.' }, { status: 400 })
 
-  try {
-    const price_data: any = { currency: 'usd', product_data: { name: `Footcandle Film Society — ${t.label}` }, unit_amount: t.amount }
-    if (mode === 'subscription') price_data.recurring = { interval: 'year' }
+  const secondEmail = (second?.email || '').trim().toLowerCase()
+  const secondName = (second?.name || '').trim()
+  const secondTier = second?.tier === 'student' ? 'student' : 'regular'
+  const hasSecond = !!secondEmail && secondEmail.includes('@') && !!secondName
 
-    const metadata = { member_id: '', tier, mode, email: cleanEmail, name: cleanName, new_member: 'true' }
+  const line_items = [lineItem(tier, mode)]
+  const metadata: Record<string, string> = { member_id: await memberIdForEmail(cleanEmail), tier, mode, email: cleanEmail, name: cleanName, new_member: 'true' }
+  if (hasSecond) {
+    line_items.push(lineItem(secondTier, mode))
+    metadata.household_id = (globalThis.crypto as any).randomUUID()
+    metadata.member2_id = await memberIdForEmail(secondEmail)
+    metadata.member2_tier = secondTier
+    metadata.member2_email = secondEmail
+    metadata.member2_name = secondName
+  }
+
+  try {
     const session = await getStripe().checkout.sessions.create({
       mode,
-      line_items: [{ price_data, quantity: 1 }],
+      line_items,
       customer_email: cleanEmail,
       success_url: `${SITE_URL}/renew/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/newmember?canceled=1`,

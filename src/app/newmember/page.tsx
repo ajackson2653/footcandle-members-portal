@@ -18,14 +18,22 @@ const TIERS: { id: Tier; label: string; price: string; note: string }[] = [
   { id: 'student', label: 'Student', price: '$25', note: 'per year' },
 ]
 
+const PRICE: Record<Tier, number> = { regular: 50, student: 25 }
+
 export default function NewMemberPage() {
   const [tier, setTier] = useState<Tier>('regular')
   const [mode, setMode] = useState<Mode>('subscription')
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
+  const [addSecond, setAddSecond] = useState(false)
+  const [secondName, setSecondName] = useState('')
+  const [secondEmail, setSecondEmail] = useState('')
+  const [secondTier, setSecondTier] = useState<Tier>('regular')
   const [canceled, setCanceled] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+
+  const total = PRICE[tier] + (addSecond ? PRICE[secondTier] : 0)
 
   useEffect(() => { setCanceled(new URLSearchParams(window.location.search).get('canceled') === '1') }, [])
 
@@ -33,12 +41,13 @@ export default function NewMemberPage() {
     setError('')
     if (!name.trim()) { setError('Please enter your name.'); return }
     if (!email.includes('@')) { setError('Please enter a valid email.'); return }
+    if (addSecond && (!secondName.trim() || !secondEmail.includes('@'))) { setError('Please enter the second person’s name and a valid email — or uncheck the second membership.'); return }
     setLoading(true)
     try {
       const res = await fetch('/api/checkout-new', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, tier, mode }),
+        body: JSON.stringify({ name, email, tier, mode, second: addSecond ? { name: secondName, email: secondEmail, tier: secondTier } : undefined }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.url) throw new Error(json.error || 'Could not start checkout')
@@ -90,10 +99,35 @@ export default function NewMemberPage() {
         <h2 style={label}>Email address</h2>
         <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={input} />
 
+        {/* Optional second membership (e.g. a spouse), paid together */}
+        <div style={{ marginTop: 24, padding: 16, background: '#eef3f8', border: '1px solid #dbe3ec', borderRadius: 10 }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontWeight: 600, color: INK }}>
+            <input type="checkbox" checked={addSecond} onChange={(e) => setAddSecond(e.target.checked)} />
+            Add a second membership (e.g., for a spouse), paid together
+          </label>
+          {addSecond && (
+            <div style={{ marginTop: 14, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div><label style={s2}>Second person’s name</label><input value={secondName} onChange={(e) => setSecondName(e.target.value)} placeholder="First and last name" style={input} /></div>
+              <div><label style={s2}>Second person’s email</label><input type="email" value={secondEmail} onChange={(e) => setSecondEmail(e.target.value)} placeholder="their@email.com" style={input} /></div>
+              <div>
+                <label style={s2}>Membership type</label>
+                <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+                  {TIERS.map((t) => (
+                    <button key={t.id} onClick={() => setSecondTier(t.id)} style={{ ...tierCard, flex: '1 1 130px', ...(secondTier === t.id ? active : {}) }}>
+                      <div style={{ fontSize: 14, fontWeight: 700 }}>{t.label}</div>
+                      <div style={{ fontSize: 20, fontWeight: 800, color: BRAND }}>{t.price}</div>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
         {error && <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 8, background: '#fee2e2', color: '#b1281f', fontSize: 14 }}>{error}</div>}
 
         <button onClick={checkout} disabled={loading} style={{ ...cta, opacity: loading ? 0.6 : 1 }}>
-          {loading ? 'Redirecting to secure checkout…' : 'Continue to secure checkout'}
+          {loading ? 'Redirecting to secure checkout…' : `Continue to secure checkout — $${total}${mode === 'subscription' ? '/yr' : ''}`}
         </button>
         <p style={{ fontSize: 12, color: MUTED, marginTop: 14, textAlign: 'center' }}>Payments are processed securely by Stripe. Footcandle never sees your card details.</p>
       </div>
@@ -102,6 +136,7 @@ export default function NewMemberPage() {
 }
 
 const label: React.CSSProperties = { fontSize: 13, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.14em', color: MUTED, margin: '30px 0 12px' }
+const s2: React.CSSProperties = { fontSize: 13, fontWeight: 600, color: MUTED, marginBottom: 6, display: 'block' }
 const tierCard: React.CSSProperties = { flex: '1 1 160px', textAlign: 'left', background: '#fff', border: '1.5px solid #dbe3ec', borderRadius: 12, padding: '16px 18px', cursor: 'pointer', color: INK }
 const modeCard: React.CSSProperties = { flex: '1 1 200px', textAlign: 'left', background: '#fff', border: '1.5px solid #dbe3ec', borderRadius: 12, padding: '14px 16px', cursor: 'pointer', color: INK }
 const active: React.CSSProperties = { borderColor: BRAND, background: '#eef3f8', boxShadow: `0 0 0 1px ${BRAND}` }
