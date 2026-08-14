@@ -2,10 +2,17 @@
 // PATCH: edit a film's fields.  DELETE ?id=…: delete a film (dates cascade).
 // POST: add a screening date.   DELETE ?dateId=…: delete one screening date.
 import { NextRequest, NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createClient } from '@supabase/supabase-js'
 import { SUPABASE_URL, SUPABASE_ANON } from '@/lib/supabaseConfig'
 import { admin } from '@/lib/email'
 import { isAdmin } from '@/lib/admin'
+
+// Refresh the public pages that show screenings.
+function refreshPublic() {
+  revalidatePath('/')
+  revalidatePath('/film/[id]', 'page')
+}
 
 const FILM_FIELDS = ['title', 'poster_url', 'description', 'about_film', 'rating', 'running_time', 'trailer_url', 'published'] as const
 const DATE_FIELDS = ['screening_date', 'screening_time', 'venue', 'location_city', 'address'] as const
@@ -32,6 +39,7 @@ export async function PATCH(req: NextRequest) {
   if (!id || !updates) return NextResponse.json({ error: 'id and updates required' }, { status: 400 })
   const { data, error } = await admin().from('film_screenings').update(clean(updates, FILM_FIELDS)).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  refreshPublic()
   return NextResponse.json({ film: data })
 }
 
@@ -43,6 +51,7 @@ export async function POST(req: NextRequest) {
   const row = { film_screening_id, ...clean(date, DATE_FIELDS) }
   const { data, error } = await admin().from('screening_dates').insert(row).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+  refreshPublic()
   return NextResponse.json({ date: data })
 }
 
@@ -55,11 +64,13 @@ export async function DELETE(req: NextRequest) {
   if (dateId) {
     const { error } = await admin().from('screening_dates').delete().eq('id', dateId)
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    refreshPublic()
     return NextResponse.json({ ok: true })
   }
   if (id) {
     const { error } = await admin().from('film_screenings').delete().eq('id', id)
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
+    refreshPublic()
     return NextResponse.json({ ok: true })
   }
   return NextResponse.json({ error: 'id or dateId required' }, { status: 400 })

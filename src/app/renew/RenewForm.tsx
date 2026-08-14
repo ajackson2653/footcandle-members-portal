@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
+import { MEMBERSHIP_BENEFITS } from '@/lib/benefits'
 
 type Member = { full_name: string; email: string | null; membership_type: string | null; renewal_date: string | null; status: string | null }
 type Tier = 'regular' | 'student'
@@ -66,6 +67,16 @@ export default function RenewForm({ email, token, canceled, member }: { email: s
 
         {canceled && <div style={{ marginTop: 20, padding: '12px 14px', borderRadius: 8, background: '#fff4e5', color: '#8a5a00', fontSize: 14 }}>Checkout canceled — no charge was made. You can try again below.</div>}
 
+        <h2 style={label}>Your membership includes</h2>
+        <ul style={{ listStyle: 'none', padding: 0, margin: 0, display: 'flex', flexDirection: 'column', gap: 10 }}>
+          {MEMBERSHIP_BENEFITS.map((b, i) => (
+            <li key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', color: '#374151', lineHeight: 1.5, fontSize: 15 }}>
+              <span style={{ color: BRAND, fontWeight: 800, flex: 'none' }}>✓</span>
+              <span>{b}</span>
+            </li>
+          ))}
+        </ul>
+
         <h2 style={label}>Membership</h2>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
           {TIERS.map((t) => (
@@ -90,7 +101,7 @@ export default function RenewForm({ email, token, canceled, member }: { email: s
           </button>
         </div>
 
-        <p style={{ ...label, marginBottom: 6 }}>Paying as</p>
+        <p style={{ ...label, marginBottom: 6 }}>Member Email Address</p>
         <div style={{ padding: '12px 14px', borderRadius: 8, background: '#eef3f8', border: '1px solid #dbe3ec', fontSize: 15, color: INK }}>{email}</div>
 
         {error && <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 8, background: '#fee2e2', color: '#b1281f', fontSize: 14 }}>{error}</div>}

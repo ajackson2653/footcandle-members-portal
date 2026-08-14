@@ -4,7 +4,7 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
-export const revalidate = 300
+export const revalidate = 60
 
 const PODCAST_APPLE = 'https://podcasts.apple.com/us/podcast/footcandle-films/id1452574037'
 const PODCAST_EMBED = 'https://embed.podcasts.apple.com/us/podcast/footcandle-films/id1452574037'

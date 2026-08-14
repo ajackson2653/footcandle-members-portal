@@ -4,7 +4,7 @@
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 
-export const revalidate = 300
+export const revalidate = 60
 
 const BRAND = '#2a5680'
 const INK = '#1f2937'

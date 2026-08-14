@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { MEMBERSHIP_BENEFITS as BENEFITS } from '@/lib/benefits'
 
 const BRAND = '#2a5680'
 const INK = '#1f2937'
@@ -12,15 +13,6 @@ const TIERS = [
   { label: 'Regular', price: '$50', note: 'per person / year' },
   { label: 'Student', price: '$25', note: 'per year' },
   { label: 'Founders', price: 'Free', note: 'complimentary' },
-]
-
-const BENEFITS = [
-  'Monthly members-only screenings — documentaries, foreign narratives, and award-nominated films',
-  'A moderated discussion after every film',
-  'Priority access and member pricing at the annual Footcandle Film Festival',
-  'Invitations to special members events throughout the year',
-  'Support for our Filmmaker Grant and the Children’s International Film Festival',
-  'A seat in Western North Carolina’s community of film lovers',
 ]
 
 export default function MembershipPage() {
