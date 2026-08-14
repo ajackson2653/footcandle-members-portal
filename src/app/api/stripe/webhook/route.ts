@@ -105,6 +105,13 @@ export async function POST(req: NextRequest) {
         const sub = await getStripe().subscriptions.retrieve(inv.subscription)
         await activate(sub.metadata, inv.customer, inv.subscription, inv.customer_email)
       }
+    } else if (event.type === 'customer.subscription.updated' || event.type === 'customer.subscription.deleted') {
+      // Keep member.autorenew in sync when they cancel (or re-enable) in the
+      // Stripe billing portal. cancel_at_period_end / deleted => no auto-renew.
+      const sub: any = event.data.object
+      const memberId = sub.metadata?.member_id
+      const stillRenewing = event.type !== 'customer.subscription.deleted' && sub.status !== 'canceled' && !sub.cancel_at_period_end
+      if (memberId) await admin().from('members').update({ autorenew: !!stillRenewing }).eq('id', memberId)
     }
     return NextResponse.json({ received: true })
   } catch (e) {

@@ -19,6 +19,7 @@ interface Member {
   renewal_date: string
   autorenew: boolean
   membership_type: string
+  stripe_customer_id?: string | null
 }
 
 interface ScreeningDate {
@@ -173,6 +174,21 @@ export default function Dashboard() {
     router.push('/renew')
   }
 
+  const [billingBusy, setBillingBusy] = useState(false)
+  async function manageBilling() {
+    setBillingBusy(true)
+    try {
+      const { data } = await supabase.auth.getSession()
+      const res = await fetch('/api/billing-portal', { method: 'POST', headers: { Authorization: `Bearer ${data.session?.access_token || ''}` } })
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.url) throw new Error(json.error || 'Could not open billing management')
+      window.location.href = json.url
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Something went wrong')
+      setBillingBusy(false)
+    }
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-gradient-to-br from-brand-tint to-white flex items-center justify-center">
@@ -284,6 +300,15 @@ export default function Dashboard() {
             )}
             {household.length > 1 && (
               <p className="text-sm text-gray-600 mt-2">Covers: {household.map((m) => m.full_name).join(', ')}</p>
+            )}
+            {member.stripe_customer_id && (
+              <button
+                onClick={manageBilling}
+                disabled={billingBusy}
+                className="mt-4 text-sm text-brand font-semibold underline hover:text-brand-dark disabled:opacity-60"
+              >
+                {billingBusy ? 'Opening…' : 'Manage payment & auto-renewal'}
+              </button>
             )}
           </div>
 
