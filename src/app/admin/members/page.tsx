@@ -34,6 +34,8 @@ export default function MembersManager() {
   const [query, setQuery] = useState('')
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [typeFilter, setTypeFilter] = useState<string>('all')
+  const [sortKey, setSortKey] = useState<'name' | 'email' | 'renewal_date'>('name')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc')
   const [editId, setEditId] = useState<string | null>(null)
   const [form, setForm] = useState<Editable>({})
   const [adding, setAdding] = useState(false)
@@ -83,7 +85,7 @@ export default function MembersManager() {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
-    return members.filter((m) => {
+    const list = members.filter((m) => {
       if (statusFilter !== 'all' && (m.status || '') !== statusFilter) return false
       if (typeFilter !== 'all' && (m.membership_type || '') !== typeFilter) return false
       if (!q) return true
@@ -92,7 +94,25 @@ export default function MembersManager() {
         (m.email || '').toLowerCase().includes(q)
       )
     })
-  }, [members, query, statusFilter, typeFilter])
+    const keyOf = (m: Member) => {
+      if (sortKey === 'email') return (m.email || '').toLowerCase()
+      if (sortKey === 'renewal_date') return (m.renewal_date || '')
+      // name → last name, then first name
+      return `${(m.last_name || m.full_name || '').toLowerCase()} ${(m.first_name || '').toLowerCase()}`
+    }
+    list.sort((a, b) => {
+      const av = keyOf(a), bv = keyOf(b)
+      const cmp = av < bv ? -1 : av > bv ? 1 : 0
+      return sortDir === 'asc' ? cmp : -cmp
+    })
+    return list
+  }, [members, query, statusFilter, typeFilter, sortKey, sortDir])
+
+  function sortBy(key: 'name' | 'email' | 'renewal_date') {
+    if (sortKey === key) setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'))
+    else { setSortKey(key); setSortDir('asc') }
+  }
+  const arrow = (key: string) => (sortKey === key ? (sortDir === 'asc' ? ' ▲' : ' ▼') : '')
 
   const counts = useMemo(() => {
     const c = { active: 0, expired: 0, canceled: 0, other: 0 }
@@ -279,11 +299,11 @@ export default function MembersManager() {
           <table style={s.table}>
             <thead>
               <tr>
-                <th style={s.th}>Name</th>
-                <th style={s.th}>Email</th>
+                <th style={{ ...s.th, cursor: 'pointer' }} onClick={() => sortBy('name')}>Name (last){arrow('name')}</th>
+                <th style={{ ...s.th, cursor: 'pointer' }} onClick={() => sortBy('email')}>Email{arrow('email')}</th>
                 <th style={s.th}>Type</th>
                 <th style={s.th}>Status</th>
-                <th style={s.th}>Renewal</th>
+                <th style={{ ...s.th, cursor: 'pointer' }} onClick={() => sortBy('renewal_date')}>Renewal{arrow('renewal_date')}</th>
                 <th style={s.th}>Auto</th>
                 <th style={{ ...s.th, textAlign: 'right' }}>Actions</th>
               </tr>
