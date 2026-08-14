@@ -79,6 +79,16 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Invalid signature: ${e instanceof Error ? e.message : 'bad'}` }, { status: 400 })
   }
 
+  // Idempotency: apply each Stripe event only once. Stripe retries and can
+  // deliver duplicates — without this, a renewal could stack extra years.
+  // Claiming the event id first is atomic; a duplicate insert (23505) means
+  // we've already handled it. (If the stripe_events table doesn't exist yet,
+  // we don't block — we just skip the guard.)
+  const { error: claimErr } = await admin().from('stripe_events').insert({ event_id: event.id })
+  if (claimErr && (claimErr as any).code === '23505') {
+    return NextResponse.json({ received: true, duplicate: true })
+  }
+
   try {
     if (event.type === 'checkout.session.completed') {
       const s = event.data.object
@@ -92,6 +102,8 @@ export async function POST(req: NextRequest) {
     }
     return NextResponse.json({ received: true })
   } catch (e) {
+    // Genuine handler failure: release the claim so Stripe's retry can reprocess.
+    try { await admin().from('stripe_events').delete().eq('event_id', event.id) } catch { /* ignore */ }
     return NextResponse.json({ error: e instanceof Error ? e.message : 'handler error' }, { status: 500 })
   }
 }
