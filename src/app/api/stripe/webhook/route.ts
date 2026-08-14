@@ -55,12 +55,18 @@ async function activate(meta: any, customer: string | null, subscription: string
   }
 
   if (mail) {
+    const displayName = (member?.full_name && String(member.full_name).trim()) || (meta?.name && String(meta.name).trim()) || mail.split('@')[0]
+    const portal = process.env.NEXT_PUBLIC_SITE_URL || 'https://members.footcandle.org'
+    const plan = isSub
+      ? `You opted to have this membership auto-renew each year. This will continue until you decide to end your membership; you can do this at any time by visiting our Member Portal at ${portal}.`
+      : `This is a one-year membership. You will be notified when it is time to renew if you wish to continue your membership past this year.`
     const body =
-      `Thank you — your Footcandle Film Society membership is confirmed and active through ${pretty(renewal)}.\n\n` +
-      `${isSub ? 'Your membership will renew automatically each year; you can cancel anytime.' : 'This is a one-year membership.'}\n\n` +
+      `Thank you — your Footcandle Film Society membership for ${displayName} at the email address ${mail} is confirmed and active through ${pretty(renewal)}.\n\n` +
+      `${plan}\n\n` +
+      `You will start receiving email notifications of all film screenings and events right away.\n\n` +
       `We'll see you at the movies.\n— Footcandle Film Society`
     try {
-      const id = await queueEmail({ email_type: 'renewal_confirmation', recipient_email: mail, subject: 'Your Footcandle membership is confirmed', body, metadata: { auto: true } })
+      const id = await queueEmail({ email_type: 'renewal_confirmation', recipient_email: mail, subject: 'Your Footcandle Film Society membership is confirmed', body, metadata: { auto: true } })
       await sendQueued(id)
     } catch { /* confirmation email is best-effort; payment already recorded */ }
   }
