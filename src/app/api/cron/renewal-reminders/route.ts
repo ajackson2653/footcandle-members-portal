@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
 
       const body =
         `Your Footcandle Film Society membership renews on ${pretty(dateStr)} — that's ${days} days away.\n\n` +
-        `Renew online in a minute here:\n${SITE_URL}/renew\n\n` +
+        `Sign in to your member portal to renew in a minute:\n${SITE_URL}/login\n\n` +
         `Thank you for supporting independent film in Western North Carolina.\n— Footcandle Film Society`
       const id = await queueEmail({
         email_type: 'renewal_reminder',

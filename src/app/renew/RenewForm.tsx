@@ -2,13 +2,13 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
 
 type Member = { full_name: string; email: string | null; membership_type: string | null; renewal_date: string | null; status: string | null }
 type Tier = 'regular' | 'student'
 type Mode = 'subscription' | 'payment'
 
 const BRAND = '#2a5680'
-const BRAND_DARK = '#1e3f5f'
 const INK = '#1f2937'
 const MUTED = '#5b6472'
 
@@ -23,22 +23,21 @@ function fmt(s: string | null) {
   return isNaN(d.getTime()) ? null : d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
 }
 
-export default function RenewForm({ token, canceled, member }: { token: string; canceled: boolean; member: Member | null }) {
+export default function RenewForm({ email, canceled, member }: { email: string; canceled: boolean; member: Member | null }) {
   const [tier, setTier] = useState<Tier>('regular')
   const [mode, setMode] = useState<Mode>('subscription')
-  const [email, setEmail] = useState(member?.email || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
   async function checkout() {
     setError('')
-    if (!email.includes('@')) { setError('Please enter a valid email.'); return }
     setLoading(true)
     try {
+      const { data: sess } = await supabase.auth.getSession()
       const res = await fetch('/api/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token, email, tier, mode }),
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sess.session?.access_token || ''}` },
+        body: JSON.stringify({ tier, mode }),
       })
       const json = await res.json().catch(() => ({}))
       if (!res.ok || !json.url) throw new Error(json.error || 'Could not start checkout')
@@ -54,17 +53,16 @@ export default function RenewForm({ token, canceled, member }: { token: string; 
   return (
     <div style={{ background: '#f7f9fc', color: INK, minHeight: '100vh' }}>
       <div style={{ maxWidth: 620, margin: '0 auto', padding: '28px 24px 64px' }}>
-        <Link href="/"><img src="/footcandle-logo.png" alt="Footcandle Film Society" style={{ height: 40, width: 'auto', display: 'block' }} /></Link>
+        <Link href="/dashboard"><img src="/footcandle-logo.png" alt="Footcandle Film Society" style={{ height: 40, width: 'auto', display: 'block' }} /></Link>
 
         <h1 style={{ fontSize: 34, fontWeight: 800, marginTop: 32, letterSpacing: '-0.02em' }}>
-          {member ? `Welcome back, ${member.full_name.split(' ')[0]}.` : 'Join or renew your membership'}
+          {member ? `Renew your membership, ${member.full_name.split(' ')[0]}.` : 'Renew your membership'}
         </h1>
         {member && renewalStr && (
           <p style={{ marginTop: 10, color: MUTED }}>
             Your membership {member.status === 'expired' ? 'expired' : 'is set to renew'} on <b style={{ color: BRAND }}>{renewalStr}</b>. Renewing adds another year.
           </p>
         )}
-        {!member && <p style={{ marginTop: 10, color: MUTED }}>Support independent film in Western North Carolina. Enter your email and choose a membership below.</p>}
 
         {canceled && <div style={{ marginTop: 20, padding: '12px 14px', borderRadius: 8, background: '#fff4e5', color: '#8a5a00', fontSize: 14 }}>Checkout canceled — no charge was made. You can try again below.</div>}
 
@@ -92,8 +90,8 @@ export default function RenewForm({ token, canceled, member }: { token: string; 
           </button>
         </div>
 
-        <h2 style={label}>Email</h2>
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" style={input} />
+        <p style={{ ...label, marginBottom: 6 }}>Paying as</p>
+        <div style={{ padding: '12px 14px', borderRadius: 8, background: '#eef3f8', border: '1px solid #dbe3ec', fontSize: 15, color: INK }}>{email}</div>
 
         {error && <div style={{ marginTop: 16, padding: '12px 14px', borderRadius: 8, background: '#fee2e2', color: '#b1281f', fontSize: 14 }}>{error}</div>}
 
@@ -101,6 +99,7 @@ export default function RenewForm({ token, canceled, member }: { token: string; 
           {loading ? 'Redirecting to secure checkout…' : 'Continue to secure checkout'}
         </button>
         <p style={{ fontSize: 12, color: MUTED, marginTop: 14, textAlign: 'center' }}>Payments are processed securely by Stripe. Footcandle never sees your card details.</p>
+        <p style={{ marginTop: 18, textAlign: 'center' }}><Link href="/dashboard" style={{ color: BRAND, fontWeight: 600, textDecoration: 'none' }}>← Back to my dashboard</Link></p>
       </div>
     </div>
   )
@@ -110,5 +109,4 @@ const label: React.CSSProperties = { fontSize: 13, fontWeight: 700, textTransfor
 const tierCard: React.CSSProperties = { flex: '1 1 160px', textAlign: 'left', background: '#fff', border: '1.5px solid #dbe3ec', borderRadius: 12, padding: '16px 18px', cursor: 'pointer', color: INK }
 const modeCard: React.CSSProperties = { flex: '1 1 200px', textAlign: 'left', background: '#fff', border: '1.5px solid #dbe3ec', borderRadius: 12, padding: '14px 16px', cursor: 'pointer', color: INK }
 const active: React.CSSProperties = { borderColor: BRAND, background: '#eef3f8', boxShadow: `0 0 0 1px ${BRAND}` }
-const input: React.CSSProperties = { width: '100%', padding: '13px 14px', borderRadius: 8, border: '1.5px solid #cfd8e3', background: '#fff', color: INK, fontSize: 15, fontFamily: 'inherit' }
 const cta: React.CSSProperties = { width: '100%', marginTop: 24, padding: '15px', background: BRAND, color: '#fff', fontWeight: 800, fontSize: 16, border: 'none', borderRadius: 10, cursor: 'pointer' }

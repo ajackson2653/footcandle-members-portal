@@ -15,6 +15,12 @@ export default function LoginPage() {
   const [notice, setNotice] = useState('')
   const [linkSent, setLinkSent] = useState(false)
 
+  // After sign-in, return to ?next= if it's a safe in-app path.
+  function destination() {
+    const n = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('next') : null
+    return n && n.startsWith('/') && !n.startsWith('//') ? n : '/dashboard'
+  }
+
   const handlePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(''); setNotice(''); setLoading(true)
@@ -22,13 +28,13 @@ export default function LoginPage() {
       const { data, error } = await signUpWithPassword(email.trim(), password)
       setLoading(false)
       if (error) { setError(error.message); return }
-      if (data.session) { window.location.href = '/dashboard'; return }
+      if (data.session) { window.location.href = destination(); return }
       setNotice('Almost done — check your email to confirm your account, then come back and sign in.')
     } else {
       const { error } = await signInWithPassword(email.trim(), password)
       setLoading(false)
       if (error) { setError('That email and password didn’t match. Try again, choose “Create a password” if you’re new, or use the email sign-in link below.'); return }
-      window.location.href = '/dashboard'
+      window.location.href = destination()
     }
   }
 

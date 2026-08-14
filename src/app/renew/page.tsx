@@ -1,27 +1,37 @@
-// Member-facing renewal / join page. Verifies the signed ?t= token from a
-// renewal email (server-side) to greet the member and prefill their email;
-// otherwise anyone can renew by entering their email.
-import { verifyToken } from '@/lib/renewToken'
-import RenewForm from './RenewForm'
+'use client'
 
-export const dynamic = 'force-dynamic'
+// Renewal / payment — only from inside the portal. Requires a logged-in
+// session; the member is identified by their session email (no email entry).
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import RenewForm from './RenewForm'
 
 type Member = { full_name: string; email: string | null; membership_type: string | null; renewal_date: string | null; status: string | null }
 
-async function lookup(token?: string): Promise<Member | null> {
-  const id = verifyToken(token)
-  if (!id || !process.env.SUPABASE_SERVICE_ROLE_KEY) return null
-  try {
-    const { admin } = await import('@/lib/email')
-    const { data } = await admin().from('members').select('full_name,email,membership_type,renewal_date,status').eq('id', id).maybeSingle()
-    return (data as Member) || null
-  } catch {
-    return null
-  }
-}
+export default function RenewPage() {
+  const [loading, setLoading] = useState(true)
+  const [email, setEmail] = useState('')
+  const [member, setMember] = useState<Member | null>(null)
+  const [canceled, setCanceled] = useState(false)
 
-export default async function RenewPage({ searchParams }: { searchParams: { t?: string; canceled?: string } }) {
-  const token = typeof searchParams.t === 'string' ? searchParams.t : ''
-  const member = await lookup(token)
-  return <RenewForm token={token} canceled={searchParams.canceled === '1'} member={member} />
+  useEffect(() => {
+    ;(async () => {
+      setCanceled(new URLSearchParams(window.location.search).get('canceled') === '1')
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) { window.location.href = '/login?next=/renew'; return }
+      setEmail(user.email || '')
+      const { data } = await supabase
+        .from('members')
+        .select('full_name,email,membership_type,renewal_date,status')
+        .eq('email', user.email)
+        .order('renewal_date', { ascending: false })
+      setMember((data && (data[0] as Member)) || null)
+      setLoading(false)
+    })()
+  }, [])
+
+  if (loading) {
+    return <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#5b6472', fontSize: 18, background: '#f7f9fc' }}>Loading…</div>
+  }
+  return <RenewForm email={email} canceled={canceled} member={member} />
 }

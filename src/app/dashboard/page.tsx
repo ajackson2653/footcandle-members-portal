@@ -211,13 +211,21 @@ export default function Dashboard() {
             <h1 className="text-4xl font-bold mb-2">Welcome, {member.full_name}!</h1>
             <p className="text-blue-100">Footcandle Film Society</p>
           </div>
-          <button
-            onClick={handleLogout}
-            className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-6 py-2 rounded-lg transition flex items-center gap-2"
-          >
-            <LogOut size={20} />
-            Log Out
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handleRenewal}
+              className="bg-white text-brand font-bold px-6 py-2 rounded-lg hover:bg-blue-50 transition"
+            >
+              Renew Membership
+            </button>
+            <button
+              onClick={handleLogout}
+              className="bg-white bg-opacity-20 hover:bg-opacity-30 text-white px-6 py-2 rounded-lg transition flex items-center gap-2"
+            >
+              <LogOut size={20} />
+              Log Out
+            </button>
+          </div>
         </div>
       </div>
 

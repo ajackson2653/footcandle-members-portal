@@ -66,7 +66,7 @@ export default async function Home() {
             <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Podcast</a>
             <a href={FESTIVAL_URL} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Festival</a>
             <Link href="/login" style={btnOutline}>Member Login</Link>
-            <Link href="/renew" style={btnPrimary}>Join / Renew</Link>
+            <Link href="/login" style={btnPrimary}>Join / Renew</Link>
           </div>
         </div>
       </nav>
@@ -84,7 +84,7 @@ export default async function Home() {
                 {next.film.description && <p style={{ marginTop: 16, color: '#374151', maxWidth: 560, lineHeight: 1.65 }}>{next.film.description}</p>}
                 <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                   <a href="#screenings" style={btnPrimaryLg}>See all screenings</a>
-                  <Link href="/renew" style={btnOutlineLg}>Become a member</Link>
+                  <Link href="/login" style={btnOutlineLg}>Become a member</Link>
                 </div>
               </div>
               {next.film.poster_url && <img src={next.film.poster_url} alt={next.film.title} style={{ width: '100%', maxWidth: 320, borderRadius: 12, justifySelf: 'center', boxShadow: '0 16px 44px rgba(30,63,95,0.25)' }} />}
@@ -97,7 +97,7 @@ export default async function Home() {
                 conversation — to Catawba County and Western North Carolina. Our next screening will be announced soon.
               </p>
               <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <Link href="/renew" style={btnPrimaryLg}>Become a member</Link>
+                <Link href="/login" style={btnPrimaryLg}>Become a member</Link>
                 <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={btnOutlineLg}>Listen to the podcast</a>
               </div>
             </div>
@@ -112,7 +112,7 @@ export default async function Home() {
             <h2 style={{ fontSize: 26, fontWeight: 800, color: '#fff' }}>Become a member — or renew online in a minute</h2>
             <p style={{ marginTop: 8, color: '#cfe0ef', lineHeight: 1.6 }}>Regular $50/yr · Student $25/yr. Your membership keeps independent film alive in Western North Carolina.</p>
           </div>
-          <Link href="/renew" style={{ ...btnPrimaryLg, background: '#fff', color: BRAND }}>Join / Renew now</Link>
+          <Link href="/login" style={{ ...btnPrimaryLg, background: '#fff', color: BRAND }}>Join / Renew now</Link>
         </div>
       </section>
 
@@ -189,7 +189,7 @@ export default async function Home() {
             along with the annual Footcandle Film Festival and a Children's International Film Festival. You like movies. So do we.
           </p>
           <div style={{ marginTop: 20, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Link href="/renew" style={btnPrimaryLg}>Become a member</Link>
+            <Link href="/login" style={btnPrimaryLg}>Become a member</Link>
             <Link href="/login" style={btnOutlineLg}>Member Login</Link>
           </div>
         </div>
@@ -211,7 +211,7 @@ export default async function Home() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={footHead}>Membership</span>
-              <Link href="/renew" style={footLink}>Join / Renew</Link>
+              <Link href="/login" style={footLink}>Join / Renew</Link>
               <Link href="/login" style={footLink}>Member Login</Link>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

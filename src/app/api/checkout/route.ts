@@ -1,51 +1,51 @@
 // ════════════════════════════════════════════════════════════════════
 // Create a Stripe Checkout Session for a membership renewal/join.
-// Public (no login): the payer is identified by a signed token (from a
-// renewal email) or by the email they enter. Inline price_data — no
-// pre-created Stripe Price IDs needed. Requires STRIPE_SECRET_KEY.
+// Requires a logged-in session — renewal happens only from inside the portal.
+// The payer is identified by their session email (not a typed email/token).
+// Inline price_data — no pre-created Stripe Price IDs. Requires STRIPE_SECRET_KEY.
 // ════════════════════════════════════════════════════════════════════
 import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 import { getStripe, TIERS } from '@/lib/stripe'
-import { verifyToken } from '@/lib/renewToken'
-import { admin } from '@/lib/email'
+import { SUPABASE_URL, SUPABASE_ANON } from '@/lib/supabaseConfig'
 
 export const runtime = 'nodejs'
 const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://members.footcandle.org'
 
+async function requireUser(req: NextRequest) {
+  const token = (req.headers.get('authorization') || '').replace(/^Bearer\s+/i, '')
+  if (!token) return null
+  const { data } = await createClient(SUPABASE_URL, SUPABASE_ANON).auth.getUser(token)
+  return data.user
+}
+
 export async function POST(req: NextRequest) {
   if (!process.env.STRIPE_SECRET_KEY) return NextResponse.json({ error: 'Server is missing STRIPE_SECRET_KEY. Add the Stripe keys in Vercel, then redeploy.' }, { status: 500 })
 
-  const { token, email, tier, mode } = await req.json().catch(() => ({}))
+  const user = await requireUser(req)
+  if (!user?.email) return NextResponse.json({ error: 'Please sign in to renew.' }, { status: 401 })
+  const email = user.email.trim().toLowerCase()
+
+  const { tier, mode } = await req.json().catch(() => ({}))
   const t = TIERS[tier as string]
   if (!t) return NextResponse.json({ error: 'Choose a membership type.' }, { status: 400 })
   if (mode !== 'subscription' && mode !== 'payment') return NextResponse.json({ error: 'Choose a payment option.' }, { status: 400 })
 
-  // Resolve who is paying.
+  // Link the payment to the member record (by session email) so the webhook
+  // updates the right person.
   let memberId = ''
-  let memberEmail = (email || '').trim().toLowerCase()
-  const idFromToken = verifyToken(token)
-  if (idFromToken && process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    memberId = idFromToken
-    if (!memberEmail) {
-      const { data } = await admin().from('members').select('email').eq('id', idFromToken).maybeSingle()
-      if (data?.email) memberEmail = data.email
-    }
-  }
-  if (!memberEmail || !memberEmail.includes('@')) return NextResponse.json({ error: 'A valid email is required.' }, { status: 400 })
+  const { data: m } = await createClient(SUPABASE_URL, SUPABASE_ANON).from('members').select('id').eq('email', email).order('renewal_date', { ascending: false }).limit(1).maybeSingle()
+  if (m?.id) memberId = m.id
 
   try {
-    const price_data: any = {
-      currency: 'usd',
-      product_data: { name: `Footcandle Film Society — ${t.label}` },
-      unit_amount: t.amount,
-    }
+    const price_data: any = { currency: 'usd', product_data: { name: `Footcandle Film Society — ${t.label}` }, unit_amount: t.amount }
     if (mode === 'subscription') price_data.recurring = { interval: 'year' }
 
-    const metadata = { member_id: memberId, tier, mode, email: memberEmail }
+    const metadata = { member_id: memberId, tier, mode, email }
     const session = await getStripe().checkout.sessions.create({
       mode,
       line_items: [{ price_data, quantity: 1 }],
-      customer_email: memberEmail,
+      customer_email: email,
       success_url: `${SITE_URL}/renew/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${SITE_URL}/renew?canceled=1`,
       metadata,
