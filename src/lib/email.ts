@@ -101,12 +101,17 @@ export async function resolveRecipients(row: any): Promise<MemberCtx[]> {
   } else {
     const f = row.recipient_filter || 'all_members'
     let q = admin().from('members').select(cols).not('email', 'is', null)
+    const yearAgo = new Date(); yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1)
+    const thirtyAgo = new Date(); thirtyAgo.setUTCDate(thirtyAgo.getUTCDate() - 30)
+    const y = yearAgo.toISOString().slice(0, 10)
+    const d30 = thirtyAgo.toISOString().slice(0, 10)
     if (f === 'all_active') q = q.eq('status', 'active')
     else if (f === 'all_expired') q = q.eq('status', 'expired')
-    else if (f === 'expired_12mo') {
-      const cutoff = new Date(); cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 1)
-      q = q.eq('status', 'expired').gte('renewal_date', cutoff.toISOString().slice(0, 10))
-    }
+    else if (f === 'expired_12mo') q = q.eq('status', 'expired').gte('renewal_date', y)
+    // Expired within the last 12 months, EXCLUDING the most recent 30 days.
+    else if (f === 'expired_12mo_not_recent') q = q.eq('status', 'expired').gte('renewal_date', y).lt('renewal_date', d30)
+    // Expired within the last 30 days only.
+    else if (f === 'expired_last_30') q = q.eq('status', 'expired').gte('renewal_date', d30)
     const { data } = await q
     rows = data || []
   }

@@ -5,7 +5,7 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { ArrowLeft, Send, FileText, Film } from 'lucide-react'
 
-type Audience = 'all_members' | 'all_active' | 'all_expired' | 'expired_12mo'
+type Audience = 'all_members' | 'all_active' | 'all_expired' | 'expired_12mo' | 'expired_12mo_not_recent' | 'expired_last_30'
 
 const MERGE_FIELDS: { token: string; label: string }[] = [
   { token: '{{first_name}}', label: 'First name' },
@@ -46,13 +46,17 @@ export default function ComposeEmail() {
       if (!u.data.user) { window.location.href = '/login'; return }
       setTestEmail(u.data.user.email || '')
 
-      const cutoff = new Date(); cutoff.setUTCFullYear(cutoff.getUTCFullYear() - 1)
-      const cutoffStr = cutoff.toISOString().slice(0, 10)
+      const yearAgo = new Date(); yearAgo.setUTCFullYear(yearAgo.getUTCFullYear() - 1)
+      const thirtyAgo = new Date(); thirtyAgo.setUTCDate(thirtyAgo.getUTCDate() - 30)
+      const y = yearAgo.toISOString().slice(0, 10)
+      const d30 = thirtyAgo.toISOString().slice(0, 10)
       const total = await supabase.from('members').select('email', { count: 'exact', head: true }).not('email', 'is', null)
       const active = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'active').not('email', 'is', null)
       const expired = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'expired').not('email', 'is', null)
-      const expired12 = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'expired').gte('renewal_date', cutoffStr).not('email', 'is', null)
-      setCounts({ all_members: total.count || 0, all_active: active.count || 0, all_expired: expired.count || 0, expired_12mo: expired12.count || 0 })
+      const expired12 = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'expired').gte('renewal_date', y).not('email', 'is', null)
+      const expired12NotRecent = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'expired').gte('renewal_date', y).lt('renewal_date', d30).not('email', 'is', null)
+      const expiredLast30 = await supabase.from('members').select('email', { count: 'exact', head: true }).eq('status', 'expired').gte('renewal_date', d30).not('email', 'is', null)
+      setCounts({ all_members: total.count || 0, all_active: active.count || 0, all_expired: expired.count || 0, expired_12mo: expired12.count || 0, expired_12mo_not_recent: expired12NotRecent.count || 0, expired_last_30: expiredLast30.count || 0 })
 
       const today = new Date().toISOString().slice(0, 10)
       const { data: fs } = await supabase
@@ -166,7 +170,7 @@ export default function ComposeEmail() {
         <div style={s.card}>
           <label style={s.label}>Audience</label>
           <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 18 }}>
-            {([['all_active', 'Active members'], ['all_members', 'All members'], ['all_expired', 'Expired members'], ['expired_12mo', 'Expired in last 12 months']] as [Audience, string][]).map(([val, lbl]) => (
+            {([['all_active', 'Active members'], ['all_members', 'All members'], ['all_expired', 'Expired members'], ['expired_12mo', 'Expired in last 12 months'], ['expired_12mo_not_recent', 'Expired 12 mo (not last 30 days)'], ['expired_last_30', 'Expired in last 30 days']] as [Audience, string][]).map(([val, lbl]) => (
               <button key={val} onClick={() => setAudience(val)} style={{ ...s.pill, ...(audience === val ? s.pillActive : {}) }}>
                 {lbl} <span style={{ opacity: 0.7 }}>({counts[val] ?? '…'})</span>
               </button>
