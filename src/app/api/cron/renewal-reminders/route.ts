@@ -5,8 +5,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { admin, queueEmail, sendQueued } from '@/lib/email'
 
-const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL || 'https://members.footcandle.org'
-
 function authorized(req: NextRequest) {
   const secret = process.env.CRON_SECRET
   if (!secret) return false
@@ -17,9 +15,6 @@ function addDaysUTC(n: number) {
   d.setUTCDate(d.getUTCDate() + n)
   return d.toISOString().slice(0, 10)
 }
-function pretty(dateStr: string) {
-  return new Date(dateStr + 'T00:00:00Z').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' })
-}
 
 export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: 'Unauthorized (set CRON_SECRET)' }, { status: 401 })
@@ -29,23 +24,33 @@ export async function GET(req: NextRequest) {
   try {
     for (const days of [30, 7]) {
       const dateStr = addDaysUTC(days)
+      // Skip anyone who will auto-charge (a live Stripe subscription): they
+      // renew automatically and get a confirmation, not a reminder. Everyone
+      // else — including members imported as "auto" from Eventive (no Stripe
+      // card yet) — still gets reminded.
       const { data } = await admin()
         .from('members')
         .select('email,renewal_date')
         .eq('status', 'active')
         .eq('renewal_date', dateStr)
         .not('email', 'is', null)
+        .or('autorenew.eq.false,stripe_subscription_id.is.null')
       const emails = Array.from(new Set((data || []).map((m: any) => (m.email || '').trim().toLowerCase()).filter((e: string) => e.includes('@'))))
       if (!emails.length) { results.push({ days, count: 0 }); continue }
 
+      // Personalized per recipient by the send engine ({{…}} merge fields),
+      // wrapped in the branded template, with a passwordless renewal button.
       const body =
-        `Your Footcandle Film Society membership renews on ${pretty(dateStr)} — that's ${days} days away.\n\n` +
-        `Sign in to your member portal to renew in a minute:\n${SITE_URL}/login\n\n` +
-        `Thank you for supporting independent film in Western North Carolina.\n— Footcandle Film Society`
+        `Dear {{first_name}},\n\n` +
+        `This is a friendly reminder that your Footcandle Film Society membership is coming up for renewal on {{renewal_date}} — about ${days} days from now.\n\n` +
+        `Renewing takes about a minute, and you won't need a password or an old login — just click below.\n\n` +
+        `{{renew_button}}\n\n` +
+        `If the button doesn't work, copy and paste this link into your browser:\n{{renew_link}}\n\n` +
+        `Thank you for being part of the Footcandle community. We'll see you at the movies!\n\n— Footcandle Film Society`
       const id = await queueEmail({
         email_type: 'renewal_reminder',
         recipient_email: emails.join(','),
-        subject: `Your Footcandle membership renews in ${days} days`,
+        subject: `Your Footcandle Film Society membership renews in ${days} days`,
         body,
         metadata: { days, count: emails.length, auto: true },
       })
