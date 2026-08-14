@@ -14,7 +14,6 @@ const FACEBOOK = 'https://www.facebook.com/footcandle'
 const YOUTUBE = 'https://www.youtube.com/channel/UCX4K0xedXNND7wJue-Xwu-g'
 const EMAIL = 'info@footcandle.org'
 
-// Brand palette derived from the logo
 const BRAND = '#2a5680'
 const BRAND_DARK = '#1e3f5f'
 const TINT = '#eef3f8'
@@ -33,18 +32,26 @@ function fmtLong(dateStr: string, timeStr?: string | null) {
   const [h, m] = timeStr.split(':')
   return `${day} · ${((+h + 11) % 12) + 1}:${m} ${+h >= 12 ? 'PM' : 'AM'}`
 }
+function dateKey(d: DateRow) { return d.screening_date + (d.screening_time || '') }
 
-async function getNextScreening(): Promise<{ film: Film; date: DateRow } | null> {
+// The featured screening = the film with the soonest upcoming date. Returns
+// that film plus ALL of its upcoming dates/locations (sorted).
+async function getFeaturedScreening(): Promise<{ film: Film; dates: DateRow[] } | null> {
   const { data, error } = await supabase
     .from('film_screenings')
     .select('id,title,description,poster_url,rating,running_time,screening_dates(screening_date,screening_time,venue,location_city,address)')
     .eq('published', true)
   if (error || !data) return null
-  let best: { film: Film; date: DateRow } | null = null
-  for (const f of data as Film[]) for (const d of f.screening_dates || []) {
-    if (d.screening_date >= today() && (!best || d.screening_date < best.date.screening_date)) best = { film: f, date: d }
+  let best: { film: Film; soonest: string } | null = null
+  for (const f of data as Film[]) {
+    const upcoming = (f.screening_dates || []).filter((d) => d.screening_date >= today())
+    if (!upcoming.length) continue
+    const soonest = upcoming.map((d) => d.screening_date).sort()[0]
+    if (!best || soonest < best.soonest) best = { film: f, soonest }
   }
-  return best
+  if (!best) return null
+  const dates = (best.film.screening_dates || []).filter((d) => d.screening_date >= today()).sort((a, b) => dateKey(a).localeCompare(dateKey(b)))
+  return { film: best.film, dates }
 }
 async function getCommunityEvents(): Promise<Community[]> {
   const { data, error } = await supabase.from('community_events').select('*').eq('published', true).gte('event_date', today()).order('event_date').limit(6)
@@ -53,41 +60,54 @@ async function getCommunityEvents(): Promise<Community[]> {
 }
 
 export default async function Home() {
-  const [next, community] = await Promise.all([getNextScreening(), getCommunityEvents()])
+  const [featured, community] = await Promise.all([getFeaturedScreening(), getCommunityEvents()])
 
   return (
     <div style={{ background: '#fff', color: INK, minHeight: '100vh' }}>
       {/* Nav */}
-      <nav style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #e6eaef' }}>
-        <div style={{ ...wrap, paddingTop: 14, paddingBottom: 14, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
-          <Link href="/"><img src="/footcandle-logo.png" alt="Footcandle Film Society" style={{ height: 38, width: 'auto', display: 'block' }} /></Link>
+      <nav style={{ position: 'sticky', top: 0, zIndex: 20, background: 'rgba(255,255,255,0.94)', backdropFilter: 'blur(8px)', borderBottom: '1px solid #e6eaef' }}>
+        <div style={{ ...wrap, paddingTop: 18, paddingBottom: 18, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+          <Link href="/"><img src="/footcandle-logo.png" alt="Footcandle Film Society" style={{ height: 66, width: 'auto', display: 'block' }} /></Link>
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
             <a href="#screenings" style={navLink} className="nav-hide">Screenings</a>
             <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Podcast</a>
             <a href={FESTIVAL_URL} target="_blank" rel="noopener noreferrer" style={navLink} className="nav-hide">Festival</a>
             <Link href="/login" style={btnOutline}>Member Login</Link>
-            <Link href="/login" style={btnPrimary}>Join / Renew</Link>
+            <Link href="/membership" style={btnPrimary}>Become a Member</Link>
           </div>
         </div>
       </nav>
 
-      {/* Hero */}
+      {/* Hero — featured film with ALL its dates/locations */}
       <section style={{ background: `linear-gradient(180deg, ${TINT}, #fff)` }}>
         <div style={{ ...wrap, paddingTop: 56, paddingBottom: 56 }}>
           <p style={kicker}>Next Film Society Screening</p>
-          {next ? (
-            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 28, alignItems: 'center' }} className="hero-grid">
+          {featured ? (
+            <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr)', gap: 28, alignItems: 'start' }} className="hero-grid">
               <div>
-                <h1 style={h1}>{next.film.title}</h1>
-                <p style={{ fontSize: 20, color: BRAND, fontWeight: 700, marginTop: 12 }}>{fmtLong(next.date.screening_date, next.date.screening_time)}</p>
-                <p style={{ marginTop: 4, color: MUTED, fontSize: 16 }}>{[next.date.venue, next.date.location_city].filter(Boolean).join(' · ')}{next.date.address ? ` — ${next.date.address}` : ''}</p>
-                {next.film.description && <p style={{ marginTop: 16, color: '#374151', maxWidth: 560, lineHeight: 1.65 }}>{next.film.description}</p>}
-                <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                  <a href="#screenings" style={btnPrimaryLg}>See all screenings</a>
-                  <Link href="/login" style={btnOutlineLg}>Become a member</Link>
+                <h1 style={h1}>{featured.film.title}</h1>
+                {(featured.film.rating || featured.film.running_time) && (
+                  <p style={{ marginTop: 8, color: MUTED, fontSize: 15 }}>{[featured.film.rating, featured.film.running_time].filter(Boolean).join(' · ')}</p>
+                )}
+                {featured.film.description && <p style={{ marginTop: 14, color: '#374151', maxWidth: 560, lineHeight: 1.65 }}>{featured.film.description}</p>}
+
+                <div style={{ marginTop: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {featured.dates.map((d, i) => (
+                    <div key={i} style={{ background: '#fff', border: '1px solid #dbe3ec', borderRadius: 10, padding: '12px 14px' }}>
+                      <div style={{ fontWeight: 700, color: BRAND }}>{fmtLong(d.screening_date, d.screening_time)}</div>
+                      <div style={{ color: MUTED, fontSize: 14, marginTop: 2 }}>
+                        {[d.venue, d.location_city].filter(Boolean).join(' · ')}{d.address ? ` — ${d.address}` : ''}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ marginTop: 22, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+                  <Link href={`/film/${featured.film.id}`} style={btnPrimaryLg}>About this Screening</Link>
+                  <Link href="/membership" style={btnOutlineLg}>Become a member</Link>
                 </div>
               </div>
-              {next.film.poster_url && <img src={next.film.poster_url} alt={next.film.title} style={{ width: '100%', maxWidth: 320, borderRadius: 12, justifySelf: 'center', boxShadow: '0 16px 44px rgba(30,63,95,0.25)' }} />}
+              {featured.film.poster_url && <img src={featured.film.poster_url} alt={featured.film.title} style={{ width: '100%', maxWidth: 320, borderRadius: 12, justifySelf: 'center', boxShadow: '0 16px 44px rgba(30,63,95,0.25)' }} />}
             </div>
           ) : (
             <div>
@@ -97,7 +117,7 @@ export default async function Home() {
                 conversation — to Catawba County and Western North Carolina. Our next screening will be announced soon.
               </p>
               <div style={{ marginTop: 24, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-                <Link href="/login" style={btnPrimaryLg}>Become a member</Link>
+                <Link href="/membership" style={btnPrimaryLg}>Become a member</Link>
                 <a href={PODCAST_APPLE} target="_blank" rel="noopener noreferrer" style={btnOutlineLg}>Listen to the podcast</a>
               </div>
             </div>
@@ -105,14 +125,14 @@ export default async function Home() {
         </div>
       </section>
 
-      {/* Membership CTA band — payments front and center */}
+      {/* Membership band */}
       <section style={{ background: BRAND }}>
         <div style={{ ...wrap, paddingTop: 40, paddingBottom: 40, display: 'flex', flexWrap: 'wrap', gap: 20, alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ maxWidth: 640 }}>
-            <h2 style={{ fontSize: 26, fontWeight: 800, color: '#fff' }}>Become a member — or renew online in a minute</h2>
-            <p style={{ marginTop: 8, color: '#cfe0ef', lineHeight: 1.6 }}>Regular $50/yr · Student $25/yr. Your membership keeps independent film alive in Western North Carolina.</p>
+            <h2 style={{ fontSize: 26, fontWeight: 800, color: '#fff' }}>Become a member of Footcandle Film Society</h2>
+            <p style={{ marginTop: 8, color: '#cfe0ef', lineHeight: 1.6 }}>Regular $50/yr · Student $25/yr. Your membership keeps independent film alive in Western North Carolina. Already a member? <Link href="/login" style={{ color: '#fff', textDecoration: 'underline' }}>Sign in to renew.</Link></p>
           </div>
-          <Link href="/login" style={{ ...btnPrimaryLg, background: '#fff', color: BRAND }}>Join / Renew now</Link>
+          <Link href="/membership" style={{ ...btnPrimaryLg, background: '#fff', color: BRAND }}>Become a Member</Link>
         </div>
       </section>
 
@@ -189,7 +209,7 @@ export default async function Home() {
             along with the annual Footcandle Film Festival and a Children's International Film Festival. You like movies. So do we.
           </p>
           <div style={{ marginTop: 20, display: 'flex', gap: 12, flexWrap: 'wrap' }}>
-            <Link href="/login" style={btnPrimaryLg}>Become a member</Link>
+            <Link href="/membership" style={btnPrimaryLg}>Become a member</Link>
             <Link href="/login" style={btnOutlineLg}>Member Login</Link>
           </div>
         </div>
@@ -211,7 +231,7 @@ export default async function Home() {
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               <span style={footHead}>Membership</span>
-              <Link href="/login" style={footLink}>Join / Renew</Link>
+              <Link href="/membership" style={footLink}>Become a Member</Link>
               <Link href="/login" style={footLink}>Member Login</Link>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
