@@ -58,7 +58,7 @@ export async function POST(req: NextRequest) {
   if (!event?.title || !event?.event_date) return NextResponse.json({ error: 'title and event_date are required' }, { status: 400 })
   const { data, error } = await admin().from('community_events').insert(clean(event)).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-  revalidatePath('/')
+  revalidatePath('/'); revalidatePath('/community/[id]', 'page')
   return NextResponse.json({ event: data })
 }
 
@@ -69,7 +69,7 @@ export async function PATCH(req: NextRequest) {
   if (!id || !updates) return NextResponse.json({ error: 'id and updates are required' }, { status: 400 })
   const { data, error } = await admin().from('community_events').update(clean(updates)).eq('id', id).select().single()
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-  revalidatePath('/')
+  revalidatePath('/'); revalidatePath('/community/[id]', 'page')
   return NextResponse.json({ event: data })
 }
 
@@ -80,6 +80,6 @@ export async function DELETE(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
   const { error } = await admin().from('community_events').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 400 })
-  revalidatePath('/')
+  revalidatePath('/'); revalidatePath('/community/[id]', 'page')
   return NextResponse.json({ ok: true })
 }

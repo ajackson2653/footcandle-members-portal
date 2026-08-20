@@ -143,15 +143,13 @@ export default async function Home() {
           {community.length ? (
             <div style={grid3}>
               {community.map((e) => (
-                <div key={e.id} style={card}>
-                  {e.poster_url && <img src={e.poster_url} alt={e.title} style={{ width: '100%', height: 160, objectFit: 'cover', borderRadius: 8, marginBottom: 12 }} />}
+                <Link key={e.id} href={`/community/${e.id}`} style={{ ...card, textDecoration: 'none', color: INK, display: 'block' }}>
+                  {e.poster_url && <img src={e.poster_url} alt={e.title} style={{ width: '100%', height: 'auto', borderRadius: 8, marginBottom: 12, display: 'block' }} />}
                   <h3 style={{ fontSize: 18, fontWeight: 700 }}>{e.title}</h3>
                   <p style={{ marginTop: 6, color: BRAND, fontWeight: 700, fontSize: 14 }}>{fmtLong(e.event_date, e.event_time)}</p>
                   <p style={{ marginTop: 2, color: MUTED, fontSize: 14 }}>{[e.venue, e.location_city].filter(Boolean).join(' · ')}</p>
                   {e.host_org && <p style={{ marginTop: 8, color: '#8a8a98', fontSize: 13 }}>Presented by {e.host_org}</p>}
-                  {e.description && <p style={{ marginTop: 10, color: '#4b5563', fontSize: 14, lineHeight: 1.5 }}>{e.description}</p>}
-                  {e.link_url && <a href={e.link_url} target="_blank" rel="noopener noreferrer" style={{ color: BRAND, fontWeight: 600, display: 'inline-block', marginTop: 12 }}>More info →</a>}
-                </div>
+                </Link>
               ))}
             </div>
           ) : (
