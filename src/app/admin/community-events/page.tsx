@@ -26,6 +26,21 @@ export default function CommunityEventsAdmin() {
   const [adding, setAdding] = useState(false)
   const [form, setForm] = useState<Draft>({})
   const [busy, setBusy] = useState(false)
+  const [uploading, setUploading] = useState(false)
+
+  async function uploadPoster(file: File) {
+    setUploading(true); setMsg(null)
+    try {
+      const fileName = `community-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+      const { error } = await supabase.storage.from('film-posters').upload(fileName, file)
+      if (error) throw error
+      const { data } = supabase.storage.from('film-posters').getPublicUrl(fileName)
+      setForm((f) => ({ ...f, poster_url: data.publicUrl }))
+      setMsg({ text: 'Poster uploaded.', ok: true })
+    } catch (e) {
+      setMsg({ text: `Poster upload failed: ${e instanceof Error ? e.message : 'error'}`, ok: false })
+    } finally { setUploading(false) }
+  }
 
   useEffect(() => {
     ;(async () => {
@@ -141,7 +156,16 @@ export default function CommunityEventsAdmin() {
               <F label="Address"><input style={s.input} value={form.address ?? ''} onChange={(e) => setForm({ ...form, address: e.target.value })} /></F>
               <F label="Presented by (host org)"><input style={s.input} value={form.host_org ?? ''} onChange={(e) => setForm({ ...form, host_org: e.target.value })} /></F>
               <F label="Info / tickets link"><input style={s.input} placeholder="https://…" value={form.link_url ?? ''} onChange={(e) => setForm({ ...form, link_url: e.target.value })} /></F>
-              <F label="Poster image URL"><input style={s.input} placeholder="https://…" value={form.poster_url ?? ''} onChange={(e) => setForm({ ...form, poster_url: e.target.value })} /></F>
+              <F label="Poster image" span2>
+                <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start', flexWrap: 'wrap' }}>
+                  {form.poster_url ? <img src={form.poster_url} alt="poster" style={{ width: 70, height: 'auto', borderRadius: 6, border: '1px solid #e5e7eb', flexShrink: 0 }} /> : null}
+                  <div style={{ flex: 1, minWidth: 220 }}>
+                    <input type="file" accept="image/*" disabled={uploading} onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadPoster(f) }} style={{ fontSize: 13 }} />
+                    {uploading && <span style={{ fontSize: 13, color: '#6b7280', marginLeft: 8 }}>Uploading…</span>}
+                    <input style={{ ...s.input, marginTop: 10 }} placeholder="…or paste an image URL" value={form.poster_url ?? ''} onChange={(e) => setForm({ ...form, poster_url: e.target.value })} />
+                  </div>
+                </div>
+              </F>
               <F label="Description" span2><textarea rows={3} style={{ ...s.input, resize: 'vertical' }} value={form.description ?? ''} onChange={(e) => setForm({ ...form, description: e.target.value })} /></F>
               <F label="Published"><label style={s.checkboxRow}><input type="checkbox" checked={!!form.published} onChange={(e) => setForm({ ...form, published: e.target.checked })} /><span style={{ fontSize: 14 }}>Show on public site</span></label></F>
             </div>
