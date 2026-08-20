@@ -136,6 +136,21 @@ export async function queueEmail(fields: {
   return data.id as string
 }
 
+// Substitute merge fields inside an already-HTML body (e.g. the newsletter
+// builder). Unlike personalizeBody it does NOT escape the surrounding HTML.
+export function personalizeHtml(html: string, ctx: MemberCtx): string {
+  const first = (ctx.first_name || (ctx.full_name ? ctx.full_name.split(/\s+/)[0] : '') || 'there')
+  const renewUrl = ctx.id ? `${SITE_URL}/renew?t=${signMember(ctx.id)}` : `${SITE_URL}/login`
+  const values: Record<string, string> = {
+    first_name: escapeHtml(first), name: escapeHtml(ctx.full_name || ''), email: escapeHtml(ctx.email || ''),
+    expired_date: fmtDate(ctx.expired_date || ctx.renewal_date), renewal_date: fmtDate(ctx.renewal_date),
+    autorenew: ctx.autorenew ? 'Yes' : 'No', renew_link: renewUrl,
+  }
+  let out = html.replace(/\{\{(first_name|name|email|expired_date|renewal_date|autorenew|renew_link)\}\}/g, (_m, k) => values[k] ?? '')
+  out = out.replace(/\{\{renew_button\}\}/g, renewButton(renewUrl))
+  return out
+}
+
 // Send an already-queued email via Brevo, personalized per recipient. Marks
 // the row sent/failed. Returns the number of recipients sent to.
 export async function sendQueued(id: string): Promise<number> {
@@ -147,12 +162,16 @@ export async function sendQueued(id: string): Promise<number> {
   const recipients = await resolveRecipients(row)
   if (!recipients.length) throw new Error('No valid recipients for this email')
   const bodyText = row.body || ''
+  const bodyHtml = row.html_body || null
+  // Rich HTML bodies (newsletter builder) use personalizeHtml; plain-text
+  // bodies use personalizeBody. Either way the branded wrapper is applied.
+  const content = (ctx: MemberCtx) => bodyHtml ? renderEmail(personalizeHtml(bodyHtml, ctx)) : renderEmail(personalizeBody(bodyText, ctx))
 
   let sent = 0
   for (const group of chunk(recipients, BATCH)) {
     const messageVersions = group.map((ctx) => ({
       to: [{ email: ctx.email }],
-      htmlContent: renderEmail(personalizeBody(bodyText, ctx)),
+      htmlContent: content(ctx),
     }))
     const res = await fetch('https://api.brevo.com/v3/smtp/email', {
       method: 'POST',
@@ -160,8 +179,8 @@ export async function sendQueued(id: string): Promise<number> {
       body: JSON.stringify({
         sender: { name: SENDER_NAME, email: SENDER_EMAIL },
         subject: row.subject,
-        htmlContent: renderEmail(personalizeBody(bodyText, group[0])), // fallback default
-        textContent: bodyText,
+        htmlContent: content(group[0]), // fallback default
+        textContent: bodyText || 'View this email in an HTML-capable email client.',
         messageVersions,
       }),
     })
